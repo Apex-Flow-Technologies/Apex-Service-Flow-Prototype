@@ -1,25 +1,44 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 
-export default function Login() {
+export default function SignUp() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: '', password: '', remember: false });
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
 
-  const handleChange = (key: string, value: string | boolean) => {
+  const handleChange = (key: string, value: string) => {
     setForm({ ...form, [key]: value });
   };
 
-  const handleLogin = () => {
-    // Here you would handle login logic
-    router.replace('/');
+  const handleSignUp = () => {
+    // Here you would handle sign up logic
+    router.replace('/(auth)/Login');
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Welcome Back!</Text>
-      <Text style={styles.subHeader}>Login to your account</Text>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <Text style={styles.header}>Create Account</Text>
+      <Text style={styles.subHeader}>Get started with <Text style={styles.brand}>Apex Service Flow</Text></Text>
       <View style={styles.formBox}>
+        <TextInput
+          style={styles.input}
+          placeholder="Full Name"
+          value={form.name}
+          onChangeText={v => handleChange('name', v)}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Phone Number"
+          keyboardType="phone-pad"
+          value={form.phone}
+          onChangeText={v => handleChange('phone', v)}
+        />
         <TextInput
           style={styles.input}
           placeholder="Email Address"
@@ -29,40 +48,35 @@ export default function Login() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder="Create Password"
           secureTextEntry
           value={form.password}
           onChangeText={v => handleChange('password', v)}
         />
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={styles.checkboxContainer}
-            onPress={() => handleChange('remember', !form.remember)}
-          >
-            <View style={[styles.checkbox, form.remember && styles.checkboxChecked]} />
-            <Text style={styles.checkboxLabel}>Remember me</Text>
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Text style={styles.forgot}>Forgot Password?</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Login</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          secureTextEntry
+          value={form.confirmPassword}
+          onChangeText={v => handleChange('confirmPassword', v)}
+        />
+        <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+          <Text style={styles.buttonText}>Sign Up</Text>
         </TouchableOpacity>
         <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => router.replace('/(auth)/SignUp')}>
-            <Text style={styles.link}>Sign Up</Text>
+          <Text style={styles.footerText}>Already have an account? </Text>
+          <TouchableOpacity onPress={() => router.replace('/(auth)/Login')}>
+            <Text style={styles.link}>Log In</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#fafbfc',
     alignItems: 'center',
     justifyContent: 'center',
@@ -79,6 +93,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#888',
     marginBottom: 24,
+  },
+  brand: {
+    color: '#1e90ff',
+    fontWeight: 'bold',
   },
   formBox: {
     backgroundColor: '#fff',
@@ -101,38 +119,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#bbb',
-    marginRight: 6,
-    backgroundColor: '#fff',
-  },
-  checkboxChecked: {
-    backgroundColor: '#1e90ff',
-    borderColor: '#1e90ff',
-  },
-  checkboxLabel: {
-    color: '#888',
-    fontSize: 14,
-  },
-  forgot: {
-    color: '#1e90ff',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
   button: {
     backgroundColor: '#1e90ff',

@@ -18,6 +18,9 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'confirmation-number': 'confirmation-number', // Material icon for ticket
+  'add-circle-outline': 'add-circle-outline', // Material icon for add/raise
+  'person': 'person', // Material icon for profile
 } as IconMapping;
 
 /**

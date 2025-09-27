@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
 export default function Login() {
@@ -11,8 +11,14 @@ export default function Login() {
   };
 
   const handleLogin = () => {
-    // Here you would handle login logic
-    router.replace('/');
+    // Dummy credentials
+    const DUMMY_EMAIL = 'user@example.com';
+    const DUMMY_PASSWORD = 'password123';
+    if (form.email === DUMMY_EMAIL && form.password === DUMMY_PASSWORD) {
+      router.replace('/');
+    } else {
+      Alert.alert('Login Failed', 'Invalid username or password.');
+    }
   };
 
   return (
@@ -49,12 +55,7 @@ export default function Login() {
         <TouchableOpacity style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>Login</Text>
         </TouchableOpacity>
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => router.replace('/(auth)/SignUp')}>
-            <Text style={styles.link}>Sign Up</Text>
-          </TouchableOpacity>
-        </View>
+        
       </View>
     </View>
   );

@@ -4,8 +4,11 @@ import { useRouter } from 'expo-router';
 
 export default function Login() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: '', password: '', remember: false });
-
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    remember: false,
+  });
   const handleChange = (key: string, value: string | boolean) => {
     setForm({ ...form, [key]: value });
   };
@@ -15,7 +18,7 @@ export default function Login() {
     const DUMMY_EMAIL = 'user@example.com';
     const DUMMY_PASSWORD = 'password123';
     if (form.email === DUMMY_EMAIL && form.password === DUMMY_PASSWORD) {
-      router.replace('/');
+      router.replace('/(tabs)');
     } else {
       Alert.alert('Login Failed', 'Invalid username or password.');
     }
@@ -23,7 +26,10 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Welcome Back!</Text>
+      <View style={{ alignItems: 'center', marginBottom: 10 }}>
+        <Text style={styles.header}>Welcome back to</Text>
+        <Text style={styles.brand}>Apex Service Flow</Text>
+      </View>
       <Text style={styles.subHeader}>Login to your account</Text>
       <View style={styles.formBox}>
         <TextInput
@@ -70,16 +76,19 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   header: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: '800',
     color: '#222',
-    marginTop: 32,
   },
   subHeader: {
     fontSize: 15,
     color: '#888',
     marginBottom: 24,
+  },
+  brand: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#1e90ff',
   },
   formBox: {
     backgroundColor: '#fff',

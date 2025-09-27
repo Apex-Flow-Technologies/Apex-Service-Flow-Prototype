@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import Toast from 'react-native-root-toast';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export default function RaiseTicket() {
   const [machineCode, setMachineCode] = useState('');
   const [model, setModel] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
+  const router = useRouter();
 
   const handleUpload = () => {
     // TODO: Integrate media picker
@@ -16,74 +19,88 @@ export default function RaiseTicket() {
     // TODO: Integrate audio recorder
   };
 
+
+  const showSuccessToast = () => {
+    Toast.show('Request submitted successfully', {
+      duration: Toast.durations.SHORT,
+      position: Toast.positions.BOTTOM,
+      backgroundColor: '#2E86DE', // matches your primary button color
+      textColor: '#fff',
+      shadow: true,
+      animation: true,
+      hideOnPress: true,
+      delay: 0,
+    });
+  };
+
   const handleSubmit = () => {
     // TODO: Wire to your submit logic / API
+    showSuccessToast();
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.card}>
-        <Text style={styles.title}>New Service Request</Text>
-
-        <Text style={styles.label}>Machine Code</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter Machine Code"
-          value={machineCode}
-          onChangeText={setMachineCode}
-        />
-
-        <Text style={styles.label}>Machine Model</Text>
-        <TouchableOpacity style={styles.select}>
-          <Text style={styles.selectText}>{model ? model : 'Select Model...'}</Text>
-          <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
-        </TouchableOpacity>
-
-        <Text style={styles.label}>Category</Text>
-        <TouchableOpacity style={styles.select}>
-          <Text style={styles.selectText}>{category ? category : 'Select Category...'}</Text>
-          <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
-        </TouchableOpacity>
-
-        <View style={styles.row}>
-          <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
-            <Ionicons name="camera" size={18} color="#2E86DE" />
-            <Text style={styles.actionText}>Upload Photo/Video</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.card}>
+          <Text style={styles.title}>New Service Request</Text>
+          <Text style={styles.label}>Machine Code</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter Machine Code"
+            value={machineCode}
+            onChangeText={setMachineCode}
+          />
+          <Text style={styles.label}>Machine Model</Text>
+          <TouchableOpacity style={styles.select}>
+            <Text style={styles.selectText}>{model ? model : 'Select Model...'}</Text>
+            <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={handleAudio}>
-            <Ionicons name="mic" size={18} color="#2E86DE" />
-            <Text style={styles.actionText}>Audio Input</Text>
+          <Text style={styles.label}>Category</Text>
+          <TouchableOpacity style={styles.select}>
+            <Text style={styles.selectText}>{category ? category : 'Select Category...'}</Text>
+            <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
+          </TouchableOpacity>
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
+              <Ionicons name="camera" size={18} color="#2E86DE" />
+              <Text style={styles.actionText}>Upload Photo/Video</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionBtn} onPress={handleAudio}>
+              <Ionicons name="mic" size={18} color="#2E86DE" />
+              <Text style={styles.actionText}>Audio Input</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.label}>Description of Issue</Text>
+          <TextInput
+            style={[styles.input, styles.textarea]}
+            placeholder="Describe the issue..."
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={5}
+            textAlignVertical="top"
+          />
+          <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
+            <Text style={styles.submitText}>Submit Request</Text>
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.label}>Description of Issue</Text>
-        <TextInput
-          style={[styles.input, styles.textarea]}
-          placeholder="Describe the issue..."
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={5}
-          textAlignVertical="top"
-        />
-
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-          <Text style={styles.submitText}>Submit Request</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={{ height: 60 }} />
-    </ScrollView>
+        <View style={{ height: 60 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#E8ECF5',
   },
+  container: {
+    flex: 1,
+  },
   content: {
     padding: 18,
+    paddingTop: 60, // You can adjust this value to control the space at the top.
     paddingBottom: 0,
   },
   card: {

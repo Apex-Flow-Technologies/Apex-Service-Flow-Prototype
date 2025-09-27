@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -8,66 +8,72 @@ const userProfileImage = 'https://randomuser.me/api/portraits/women/68.jpg'; // 
 export default function HomeScreen() {
   const router = useRouter();
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.cardContainer}>
-        <View style={styles.profileRow}>
-          <View style={styles.profilePicWrapper}>
-            <Image source={{ uri: userProfileImage }} style={styles.profilePic} />
-            <View style={styles.badge}>
-              <Ionicons name="checkmark-circle" size={20} color="#2E86DE" />
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.cardContainer}>
+          <View style={styles.profileRow}>
+            <View style={styles.profilePicWrapper}>
+              <Image source={{ uri: userProfileImage }} style={styles.profilePic} />
+              <View style={styles.badge}>
+                <Ionicons name="checkmark-circle" size={20} color="#2E86DE" />
+              </View>
+            </View>
+            <View>
+              <Text style={styles.userName}>Hello, Jane Doe</Text>
+              <Text style={styles.memberSince}>Member since 2022</Text>
             </View>
           </View>
-          <View>
-            <Text style={styles.userName}>Hello, Jane Doe</Text>
-            <Text style={styles.memberSince}>Member since 2022</Text>
+
+          <Text style={styles.sectionTitle}>Recent Tickets</Text>
+
+          <View style={styles.ticketCard}>
+            <View style={styles.ticketCardHeader}>
+              <Text style={styles.ticketId}>Ticket ID: #123456</Text>
+              <Ionicons name="create-outline" size={18} color="#6C63FF" />
+            </View>
+            <Text style={styles.ticketSubject}>Issue with Laptop Battery</Text>
+            <View style={styles.ticketCardFooter}>
+              <Text style={styles.statusInProgress}>In Progress</Text>
+              <Text style={styles.ticketDate}>2024-03-08</Text>
+            </View>
           </View>
+
+          <View style={styles.ticketCard}>
+            <View style={styles.ticketCardHeader}>
+              <Text style={styles.ticketId}>Ticket ID: #123455</Text>
+              <Ionicons name="checkmark-circle" size={18} color="#43A047" />
+            </View>
+            <Text style={styles.ticketSubject}>Query about Warranty</Text>
+            <View style={styles.ticketCardFooter}>
+              <Text style={styles.statusClosed}>Closed</Text>
+              <Text style={styles.ticketDate}>2024-03-01</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.raiseTicketButton} onPress={() => router.push('/(tabs)/RaiseTicket')}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.raiseTicketText}>Raise New Ticket</Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>Recent Tickets</Text>
-
-        <View style={styles.ticketCard}>
-          <View style={styles.ticketCardHeader}>
-            <Text style={styles.ticketId}>Ticket ID: #123456</Text>
-            <Ionicons name="create-outline" size={18} color="#6C63FF" />
-          </View>
-          <Text style={styles.ticketSubject}>Issue with Laptop Battery</Text>
-          <View style={styles.ticketCardFooter}>
-            <Text style={styles.statusInProgress}>In Progress</Text>
-            <Text style={styles.ticketDate}>2024-03-08</Text>
-          </View>
-        </View>
-
-        <View style={styles.ticketCard}>
-          <View style={styles.ticketCardHeader}>
-            <Text style={styles.ticketId}>Ticket ID: #123455</Text>
-            <Ionicons name="checkmark-circle" size={18} color="#43A047" />
-          </View>
-          <Text style={styles.ticketSubject}>Query about Warranty</Text>
-          <View style={styles.ticketCardFooter}>
-            <Text style={styles.statusClosed}>Closed</Text>
-            <Text style={styles.ticketDate}>2024-03-01</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.raiseTicketButton} onPress={() => router.push('/(tabs)/RaiseTicket')}>
-          <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.raiseTicketText}>Raise New Ticket</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Add space at the bottom for tab bar */}
-      <View style={{ height: 60 }} />
-    </ScrollView>
+        {/* Add space at the bottom for tab bar */}
+        <View style={{ height: 60 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
+    flex: 1,
     backgroundColor: '#E8ECF5',
+  },
+  container: {
     flex: 1,
   },
   content: {
     padding: 18,
+    paddingTop: 60, // The value has been increased to 60 for more space
     paddingBottom: 0,
   },
   cardContainer: {

@@ -10,7 +10,8 @@ export default function Profile() {
     router.replace('/(auth)/Login');
   };
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: 20 }]}>
+    // Increased paddingTop from 20 to 40 for more space
+    <SafeAreaView style={[styles.container, { paddingTop: 40 }]}>
       <View style={styles.profileHeader}>
         <View style={styles.avatarCircle}>
           <MaterialIcons name="person" size={44} color="#fff" />
@@ -52,7 +53,7 @@ function ProfileItem({ icon, label }: { icon: any; label: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fafbfc',
+    backgroundColor: '#E8ECF5',
     padding: 0,
   },
   profileHeader: {

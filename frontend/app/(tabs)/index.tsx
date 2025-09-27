@@ -10,7 +10,8 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.cardContainer}>
+        {/* Profile Container */}
+        <View style={styles.profileContainer}>
           <View style={styles.profileRow}>
             <View style={styles.profilePicWrapper}>
               <Image source={{ uri: userProfileImage }} style={styles.profilePic} />
@@ -23,7 +24,10 @@ export default function HomeScreen() {
               <Text style={styles.memberSince}>Member since 2022</Text>
             </View>
           </View>
+        </View>
 
+        {/* Tickets Container */}
+        <View style={styles.ticketsContainer}>
           <Text style={styles.sectionTitle}>Recent Tickets</Text>
 
           <View style={styles.ticketCard}>
@@ -49,12 +53,13 @@ export default function HomeScreen() {
               <Text style={styles.ticketDate}>2024-03-01</Text>
             </View>
           </View>
-
-          <TouchableOpacity style={styles.raiseTicketButton} onPress={() => router.push('/(tabs)/RaiseTicket')}>
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.raiseTicketText}>Raise New Ticket</Text>
-          </TouchableOpacity>
         </View>
+
+        {/* Raise Ticket Button above footer */}
+        <TouchableOpacity style={styles.raiseTicketButton} onPress={() => router.push('/(tabs)/RaiseTicket')}>
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.raiseTicketText}>Raise New Ticket</Text>
+        </TouchableOpacity>
 
         {/* Add space at the bottom for tab bar */}
         <View style={{ height: 60 }} />
@@ -76,7 +81,7 @@ const styles = StyleSheet.create({
     paddingTop: 60, // The value has been increased to 60 for more space
     paddingBottom: 0,
   },
-  cardContainer: {
+  profileContainer: {
     backgroundColor: '#fff',
     borderRadius: 24,
     padding: 18,
@@ -85,6 +90,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 3,
+    marginBottom: 18,
+  },
+  ticketsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 18,
   },
   profileRow: {
     flexDirection: 'row',

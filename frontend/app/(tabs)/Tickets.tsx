@@ -79,7 +79,7 @@ export default function Tickets() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 40 }]}>
       <Text style={styles.header}>Request List</Text>
       <View style={styles.tabs}>
         {TABS.map(tab => (
@@ -104,7 +104,7 @@ export default function Tickets() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#E8ECF5',
     padding: 16,
   },
   header: {

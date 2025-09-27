@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-
+import { Home, Ticket, SquarePlus, CircleUser } from "lucide-react-native";
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -20,28 +20,28 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />, 
+          tabBarIcon: ({ color, size }) => <Home color={color} size={size}/>, 
         }}
       />
       <Tabs.Screen
         name="Tickets"
         options={{
           title: 'Tickets',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="confirmation-number" color={color} />, 
+          tabBarIcon: ({ color, size }) => <Ticket color={color} size={size} />, 
         }}
       />
       <Tabs.Screen
         name="RaiseTicket"
         options={{
           title: 'Raise Ticket',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="add-circle-outline" color={color} />, 
+          tabBarIcon: ({ color, size }) => <SquarePlus color={color} size={size}/>, 
         }}
       />
       <Tabs.Screen
         name="Profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person" color={color} />, 
+          tabBarIcon: ({ color, size }) => <CircleUser color={color} size={size}/>, 
         }}
       />
     </Tabs>

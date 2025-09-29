@@ -12,9 +12,34 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        // Rounded, floating-style blue tab bar
+        tabBarStyle: {
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: 16,
+          height: 64,
+          borderRadius: 16,
+          backgroundColor: '#2E86DE',
+          borderTopWidth: 0,
+          elevation: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        },
+        tabBarActiveTintColor: '#ffffff',
+        tabBarInactiveTintColor: '#dbe8ff',
+        tabBarLabelStyle: {
+          fontWeight: '700',
+          fontSize: 12,
+          marginBottom: 8,
+        },
+        tabBarIconStyle: {
+          marginTop: 8,
+        },
       }}>
       <Tabs.Screen
         name="index"

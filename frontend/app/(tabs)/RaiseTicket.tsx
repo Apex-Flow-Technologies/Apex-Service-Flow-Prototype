@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  Modal,
   FlatList,
 } from 'react-native';
 import Toast from 'react-native-root-toast';
@@ -23,8 +22,8 @@ export default function RaiseTicket() {
   const [model, setModel] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
-  const [modelModalVisible, setModelModalVisible] = useState(false);
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const router = useRouter();
 
   const handleUpload = () => {
@@ -58,35 +57,14 @@ export default function RaiseTicket() {
     showSuccessToast();
   };
 
-  // Bottom-sheet style dropdown
-  const renderDropdown = (visible, setVisible, data, setValue) => (
-    <Modal visible={visible} transparent animationType="slide">
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setVisible(false)}
-      >
-        <View style={styles.bottomSheet}>
-          <Text style={styles.sheetTitle}>Select Option</Text>
-          <FlatList
-            data={data}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.sheetItem}
-                onPress={() => {
-                  setValue(item);
-                  setVisible(false);
-                }}
-              >
-                <Text style={styles.sheetItemText}>{item}</Text>
-              </TouchableOpacity>
-            )}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-          />
-        </View>
-      </TouchableOpacity>
-    </Modal>
+  const InlineOptions = ({ data, onSelect }: { data: string[]; onSelect: (v: string) => void }) => (
+    <View style={styles.inlineDropdown}>
+      {data.map((item) => (
+        <TouchableOpacity key={item} style={styles.inlineOption} onPress={() => onSelect(item)}>
+          <Text style={styles.inlineOptionText}>{item}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
   );
 
   return (
@@ -101,35 +79,48 @@ export default function RaiseTicket() {
           <Text style={styles.label}>Machine Model</Text>
           <TouchableOpacity
             style={styles.select}
-            onPress={() => setModelModalVisible(true)}
+            onPress={() => {
+              setModelOpen((v) => !v);
+              setCategoryOpen(false);
+            }}
           >
             <Text style={model ? styles.selectTextSelected : styles.selectText}>
               {model || 'Select Model...'}
             </Text>
             <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
           </TouchableOpacity>
+          {modelOpen && (
+            <InlineOptions
+              data={MACHINE_MODELS}
+              onSelect={(val) => {
+                setModel(val);
+                setModelOpen(false);
+              }}
+            />
+          )}
 
           <Text style={styles.label}>Category</Text>
           <TouchableOpacity
             style={styles.select}
-            onPress={() => setCategoryModalVisible(true)}
+            onPress={() => {
+              setCategoryOpen((v) => !v);
+              setModelOpen(false);
+            }}
           >
             <Text style={category ? styles.selectTextSelected : styles.selectText}>
               {category || 'Select Category...'}
             </Text>
             <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
           </TouchableOpacity>
-
-          <Text style={styles.label}>Description of Issue</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            placeholder="Describe the issue..."
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
-          />
+          {categoryOpen && (
+            <InlineOptions
+              data={CATEGORIES}
+              onSelect={(val) => {
+                setCategory(val);
+                setCategoryOpen(false);
+              }}
+            />
+          )}
 
           <View style={styles.row}>
             <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
@@ -141,6 +132,17 @@ export default function RaiseTicket() {
               <Text style={styles.actionText}>Audio Input</Text>
             </TouchableOpacity>
           </View>
+
+          <Text style={styles.label}>Description of Issue</Text>
+          <TextInput
+            style={[styles.input, styles.textarea]}
+            placeholder="Describe the issue..."
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={5}
+            textAlignVertical="top"
+          />
 
           <TouchableOpacity
             style={[
@@ -156,9 +158,7 @@ export default function RaiseTicket() {
         <View style={{ height: 60 }} />
       </ScrollView>
 
-      {/* Dropdown Modals */}
-      {renderDropdown(modelModalVisible, setModelModalVisible, MACHINE_MODELS, setModel)}
-      {renderDropdown(categoryModalVisible, setCategoryModalVisible, CATEGORIES, setCategory)}
+      {/* Inline dropdowns rendered above per-field */}
     </SafeAreaView>
   );
 }
@@ -242,18 +242,18 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.6 },
   submitText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 
-  // Modal Styles
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
-  bottomSheet: {
+  // Inline dropdown styles
+  inlineDropdown: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: 350,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginTop: 6,
+    overflow: 'hidden',
   },
-  sheetTitle: { fontSize: 16, fontWeight: '700', color: '#222', marginBottom: 8 },
-  sheetItem: { paddingVertical: 14 },
-  sheetItemText: { fontSize: 15, color: '#222' },
-  separator: { height: 1, backgroundColor: '#eee' },
+  inlineOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  inlineOptionText: { fontSize: 14, color: '#222' },
 });

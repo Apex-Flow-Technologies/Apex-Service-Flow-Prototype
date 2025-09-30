@@ -17,9 +17,9 @@ export default function TabLayout() {
         // Rounded, floating-style blue tab bar
         tabBarStyle: {
           position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: 16,
+          left: 0,
+          right: 0,
+          bottom: 0,
           height: 64,
           borderRadius: 16,
           backgroundColor: '#2E86DE',

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+// Home screen uses static demo content; tickets list lives under the Tickets tab
 
 const userProfileImage = 'https://randomuser.me/api/portraits/women/68.jpg'; // Replace with your actual image
 
@@ -92,6 +93,21 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 18,
   },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#F7F9FC',
+    borderRadius: 12,
+    paddingVertical: 10,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  statNumber: { fontSize: 16, fontWeight: '800', color: '#222' },
+  statLabel: { fontSize: 11, color: '#667085', marginTop: 2 },
   ticketsContainer: {
     backgroundColor: '#fff',
     borderRadius: 24,
@@ -160,6 +176,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     alignItems: 'center',
   },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  statusPillText: { color: '#fff', fontSize: 12, fontWeight: '700', textTransform: 'lowercase' },
   ticketId: {
     fontWeight: '600',
     color: '#363636',

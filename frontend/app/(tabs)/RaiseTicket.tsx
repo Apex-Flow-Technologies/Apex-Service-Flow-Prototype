@@ -122,6 +122,18 @@ export default function RaiseTicket() {
             />
           )}
 
+          
+          <Text style={styles.label}>Description of Issue</Text>
+          <TextInput
+            style={[styles.input, styles.textarea]}
+            placeholder="Describe the issue..."
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={5}
+            textAlignVertical="top"
+          />
+
           <View style={styles.row}>
             <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
               <Ionicons name="camera" size={18} color="#2E86DE" />
@@ -133,16 +145,6 @@ export default function RaiseTicket() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.label}>Description of Issue</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            placeholder="Describe the issue..."
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
-          />
 
           <TouchableOpacity
             style={[

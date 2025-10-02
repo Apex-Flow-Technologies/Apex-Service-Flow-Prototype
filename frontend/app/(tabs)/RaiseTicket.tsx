@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  Pressable,
   Keyboard,
 } from 'react-native';
 import Toast from 'react-native-root-toast';
@@ -202,23 +201,10 @@ export default function RaiseTicket() {
             <Text style={styles.submitText}>Submit Request</Text>
           </TouchableOpacity>
         </View>
-        <View style={{ height: 60 }} />
       </ScrollView>
-
-      {/* Inline dropdowns rendered above per-field */}
-      {(showModelSuggestions || categoryOpen) && (
-        <Pressable
-          onPress={() => {
-            setShowModelSuggestions(false);
-            setCategoryOpen(false);
-          }}
-          style={styles.overlay}
-        />
-      )}
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#E8ECF5' },
   container: { flex: 1 },
@@ -304,14 +290,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
     marginTop: 6,
     overflow: 'hidden',
-    zIndex: 100,
-    elevation: 12,
   },
   inlineOption: {
     paddingVertical: 12,
@@ -324,23 +304,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
     marginTop: 6,
     overflow: 'hidden',
     maxHeight: 200, // limited UI height with scroll
-    zIndex: 100,
-    elevation: 12,
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
   },
   fieldContainer: {
     position: 'relative',

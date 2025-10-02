@@ -1,71 +1,86 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Home, Ticket, SquarePlus, CircleUser } from "lucide-react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
+
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
+  
+  // No BOTTOM_MARGIN needed for a fixed-bottom bar, as it will sit flush with insets.
+  const TAB_BAR_HEIGHT = 64;
+  const BACKGROUND_COLOR = '#E8ECF5'; 
+  
+  // Calculate the total height the screen content needs to clear.
+  // This is just the bar height + safe area bottom inset.
+  const TAB_BAR_TOTAL_HEIGHT = TAB_BAR_HEIGHT + insets.bottom; 
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarButton: HapticTab,
-        // Rounded, floating-style blue tab bar
+        
         tabBarStyle: {
           position: 'absolute',
+          bottom: 0,
           left: 0,
           right: 0,
-          bottom: 0,
-          height: 64,
-          backgroundColor: '#2E86DE',
+          height: TAB_BAR_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom,
+          backgroundColor: '#2196F3',
           borderTopWidth: 0,
-          elevation: 6,
-          shadowColor: '#000',
-          shadowOpacity: 0.1,
-          shadowRadius: 3,
-          shadowOffset: { width: 0, height: -2 },
+          elevation: 0,
+          shadowColor: 'transparent',
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
         },
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#dbe8ff',
+        
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: '#FFFFFF',
+        
         tabBarLabelStyle: {
-          fontWeight: '700',
-          fontSize: 12,
-          marginBottom: 8,
+          fontWeight: '500',
+          fontSize: 11,
+          marginTop: 0,
+          marginBottom: 6,
         },
+        
         tabBarIconStyle: {
-          marginTop: 8,
+          marginBottom: 0,
         },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size}/>, 
+          tabBarIcon: ({ color }) => <Home color={color} size={22}/>, 
+          // OPTION: Apply padding to content of individual screens if they scroll
+          // and need to clear the tab bar.
+          // For most screens, you'd apply this to the main View/ScrollView style.
+          // example: style={{ paddingBottom: TAB_BAR_TOTAL_HEIGHT }}
         }}
       />
       <Tabs.Screen
         name="Tickets"
         options={{
           title: 'Tickets',
-          tabBarIcon: ({ color, size }) => <Ticket color={color} size={size} />, 
+          tabBarIcon: ({ color }) => <Ticket color={color} size={22} />, 
         }}
       />
       <Tabs.Screen
         name="RaiseTicket"
         options={{
           title: 'Raise Ticket',
-          tabBarIcon: ({ color, size }) => <SquarePlus color={color} size={size}/>, 
+          tabBarIcon: ({ color }) => <SquarePlus color={color} size={22}/>, 
         }}
       />
       <Tabs.Screen
         name="Profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <CircleUser color={color} size={size}/>, 
+          tabBarIcon: ({ color }) => <CircleUser color={color} size={22}/>, 
         }}
       />
     </Tabs>

@@ -9,20 +9,22 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  FlatList,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import Toast from 'react-native-root-toast';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-const MACHINE_MODELS = ['Apex 100', 'Apex 200', 'Apex Pro', 'Apex Ultra'];
+const MACHINE_MODELS = ['Apex 100', 'Apex 200', 'Apex Pro', 'Apex Ultra', 'Apex Pro Max', 'Apex Pro Max 2', 'Apex Pro Max 3'];
 const CATEGORIES = ['Mechanical', 'Electrical', 'Software', 'Other'];
 
 export default function RaiseTicket() {
   const [model, setModel] = useState('');
+  const [modelQuery, setModelQuery] = useState('');
+  const [showModelSuggestions, setShowModelSuggestions] = useState(false);
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
-  const [modelOpen, setModelOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const router = useRouter();
 
@@ -59,17 +61,22 @@ export default function RaiseTicket() {
 
   const InlineOptions = ({ data, onSelect }: { data: string[]; onSelect: (v: string) => void }) => (
     <View style={styles.inlineDropdown}>
-      {data.map((item) => (
-        <TouchableOpacity key={item} style={styles.inlineOption} onPress={() => onSelect(item)}>
-          <Text style={styles.inlineOptionText}>{item}</Text>
-        </TouchableOpacity>
+      {data.map((item, idx) => (
+        <View key={item}>
+          <TouchableOpacity style={styles.inlineOption} onPress={() => onSelect(item)}>
+            <Text style={styles.inlineOptionText}>{item}</Text>
+          </TouchableOpacity>
+          {idx < data.length - 1 && <View style={styles.inlineSeparator} />}
+        </View>
       ))}
     </View>
   );
 
+  
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.title}>New Service Request</Text>
           <Text style={styles.helper}>
@@ -77,50 +84,88 @@ export default function RaiseTicket() {
           </Text>
 
           <Text style={styles.label}>Machine Model</Text>
-          <TouchableOpacity
-            style={styles.select}
-            onPress={() => {
-              setModelOpen((v) => !v);
-              setCategoryOpen(false);
-            }}
-          >
-            <Text style={model ? styles.selectTextSelected : styles.selectText}>
-              {model || 'Select Model...'}
-            </Text>
-            <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
-          </TouchableOpacity>
-          {modelOpen && (
-            <InlineOptions
-              data={MACHINE_MODELS}
-              onSelect={(val) => {
-                setModel(val);
-                setModelOpen(false);
-              }}
-            />
-          )}
+          <View style={styles.fieldContainer}>
+            <View style={[styles.select, { gap: 8 }]}> 
+              <Ionicons name="search" size={16} color="#9AA0A6" />
+              <TextInput
+                style={{ flex: 1, padding: 0, color: modelQuery ? '#222' : '#9AA0A6' }}
+                placeholder="Search Model..."
+                placeholderTextColor="#9AA0A6"
+                value={modelQuery}
+                onChangeText={(txt) => {
+                  setModelQuery(txt);
+                  setShowModelSuggestions(true);
+                }}
+                onFocus={() => {
+                  setShowModelSuggestions(true);
+                  setCategoryOpen(false); // only one open at a time
+                }}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+            </View>
+            {showModelSuggestions && (
+              <View style={styles.suggestionsDropdown}>
+                {(() => {
+                  const q = modelQuery.trim().toLowerCase();
+                  const filtered = q
+                    ? MACHINE_MODELS.filter((m) => m.toLowerCase().includes(q))
+                    : MACHINE_MODELS.slice(0, 3); // only 3 recommendations when empty
+                  return (
+                    <ScrollView keyboardShouldPersistTaps="handled">
+                      {filtered.length === 0 ? (
+                        <Text style={styles.noResults}>No matches</Text>
+                      ) : (
+                        filtered.map((item, idx) => (
+                          <View key={item}>
+                            <TouchableOpacity
+                              style={styles.inlineOption}
+                              onPress={() => {
+                                setModel(item);
+                                setModelQuery(item);
+                                setShowModelSuggestions(false);
+                                Keyboard.dismiss();
+                              }}
+                            >
+                              <Text style={styles.inlineOptionText}>{item}</Text>
+                            </TouchableOpacity>
+                            {idx < filtered.length - 1 && <View style={styles.inlineSeparator} />}
+                          </View>
+                        ))
+                      )}
+                    </ScrollView>
+                  );
+                })()}
+              </View>
+            )}
+          </View>
 
-          <Text style={styles.label}>Category</Text>
-          <TouchableOpacity
-            style={styles.select}
-            onPress={() => {
-              setCategoryOpen((v) => !v);
-              setModelOpen(false);
-            }}
-          >
-            <Text style={category ? styles.selectTextSelected : styles.selectText}>
-              {category || 'Select Category...'}
-            </Text>
-            <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
-          </TouchableOpacity>
-          {categoryOpen && (
-            <InlineOptions
-              data={CATEGORIES}
-              onSelect={(val) => {
-                setCategory(val);
-                setCategoryOpen(false);
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Category</Text>
+            <TouchableOpacity
+              style={styles.select}
+              onPress={() => {
+                setCategoryOpen((v) => !v);
+                setShowModelSuggestions(false);
+                Keyboard.dismiss();
               }}
-            />
-          )}
+            >
+              <Text style={category ? styles.selectTextSelected : styles.selectText}>
+                {category || 'Select Category...'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
+            </TouchableOpacity>
+            {categoryOpen && (
+              <InlineOptions
+                data={CATEGORIES}
+                onSelect={(val) => {
+                  setCategory(val);
+                  setCategoryOpen(false);
+                }}
+              />
+            )}
+          </View>
 
           
           <Text style={styles.label}>Description of Issue</Text>
@@ -137,7 +182,7 @@ export default function RaiseTicket() {
           <View style={styles.row}>
             <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
               <Ionicons name="camera" size={18} color="#2E86DE" />
-              <Text style={styles.actionText}>Upload Photo/Video</Text>
+              <Text style={styles.actionText}>Upload Attachement</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleAudio}>
               <Ionicons name="mic" size={18} color="#2E86DE" />
@@ -161,6 +206,15 @@ export default function RaiseTicket() {
       </ScrollView>
 
       {/* Inline dropdowns rendered above per-field */}
+      {(showModelSuggestions || categoryOpen) && (
+        <Pressable
+          onPress={() => {
+            setShowModelSuggestions(false);
+            setCategoryOpen(false);
+          }}
+          style={styles.overlay}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -250,12 +304,57 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
     marginTop: 6,
     overflow: 'hidden',
+    zIndex: 100,
+    elevation: 12,
   },
   inlineOption: {
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   inlineOptionText: { fontSize: 14, color: '#222' },
+  inlineSeparator: { height: 1, backgroundColor: '#E5E7EB' },
+  suggestionsDropdown: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    marginTop: 6,
+    overflow: 'hidden',
+    maxHeight: 200, // limited UI height with scroll
+    zIndex: 100,
+    elevation: 12,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+  },
+  fieldContainer: {
+    position: 'relative',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  searchInput: { flex: 1, fontSize: 14, color: '#222', padding: 0 },
+  noResults: { paddingHorizontal: 14, paddingVertical: 12, color: '#6b7280', fontStyle: 'italic' },
 });

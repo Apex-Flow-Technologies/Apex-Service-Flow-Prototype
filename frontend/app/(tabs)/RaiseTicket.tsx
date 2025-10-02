@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
 
   // Inline dropdown styles
   inlineDropdown: {
-    backgroundColor: '#fff',
+    backgroundColor: '#eeeeee',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -298,9 +298,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inlineOptionText: { fontSize: 14, color: '#222' },
-  inlineSeparator: { height: 1, backgroundColor: '#E5E7EB' },
+  inlineSeparator: { height: 1, backgroundColor: '#999999' },
   suggestionsDropdown: {
-    backgroundColor: '#fff',
+    backgroundColor: '#eeeeee',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',

@@ -6,6 +6,13 @@ import { getTicketById, statusColor, Ticket } from '@/lib/mock/tickets';
 // Hide this screen from the bottom tab bar
 export const href = null;
 
+// Enable swipe back gesture
+export const unstable_settings = {
+  gestureEnabled: true,
+  gestureDirection: 'horizontal',
+  animationTypeForReplace: 'push',
+};
+
 export default function TicketDetails() {
   const params = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();

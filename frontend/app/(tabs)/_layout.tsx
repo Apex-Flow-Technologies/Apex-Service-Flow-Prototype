@@ -1,7 +1,28 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Home, Ticket, SquarePlus, CircleUser } from "lucide-react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
+import { Platform } from 'react-native';
+
+// Try to require expo-navigation-bar at runtime. We do this so iOS and
+// environments without the package won't crash during bundling.
+let NavigationBar: any = null;
+try {
+  NavigationBar = require('expo-navigation-bar');
+} catch (e) {
+  NavigationBar = null;
+}
+if (!NavigationBar) {
+  // created for the upcoming updates
+  // Helpful runtime log so developers know the platform API is missing.
+  // Metro logs will show this when running the app.
+  // If you see this message, install the package with:
+  //   expo install expo-navigation-bar
+  // Then rebuild a dev client or standalone app to test.
+  // (Expo Go won't surface native modules added after the app was built.)
+  // eslint-disable-next-line no-console
+  console.warn('[app/(tabs)/_layout] expo-navigation-bar is not installed or unavailable. System nav color change is disabled.');
+}
 
 import { HapticTab } from '@/components/haptic-tab';
 
@@ -15,6 +36,31 @@ export default function TabLayout() {
   // Calculate the total height the screen content needs to clear.
   // This is just the bar height + safe area bottom inset.
   const TAB_BAR_TOTAL_HEIGHT = TAB_BAR_HEIGHT + insets.bottom; 
+  useEffect(() => {
+    // Only run on Android and when expo-navigation-bar is available.
+    if (Platform.OS === 'android' && NavigationBar && NavigationBar.setBackgroundColorAsync) {
+      try {
+        // Set nav bar background color to match the app footer and use light
+        // button style so icons are white on the blue background.
+        NavigationBar.setBackgroundColorAsync('#2196F3');
+        if (NavigationBar.setButtonStyle) NavigationBar.setButtonStyle('light');
+      } catch (e) {
+        // Best-effort only; swallow errors.
+      }
+    }
+
+    return () => {
+      // Reset to a neutral background on unmount if API available.
+      if (Platform.OS === 'android' && NavigationBar && NavigationBar.setBackgroundColorAsync) {
+        try {
+          NavigationBar.setBackgroundColorAsync('#FFFFFF');
+          if (NavigationBar.setButtonStyle) NavigationBar.setButtonStyle('dark');
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
   return (
     <Tabs

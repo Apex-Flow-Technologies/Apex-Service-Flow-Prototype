@@ -49,7 +49,7 @@ export default function Tickets() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 40 }]}>
-      <Text style={styles.header}>Request List</Text>
+      <Text style={styles.header}>Raised Tickets</Text>
       <View style={styles.tabs}>
         {TABS.map(tab => (
           <TouchableOpacity

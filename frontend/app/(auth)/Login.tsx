@@ -27,11 +27,13 @@ export default function Login() {
   return (
     <View style={styles.container}>
       <View style={styles.brandContainer}>
+        <Text style={styles.welcomeText}>Welcome to</Text>
         <Image
           source={require('../../assets/images/techno-bright-logo.png')}
           style={styles.logoImage}
           resizeMode="contain"
         />
+        <Text style={styles.appText}>Service Request App</Text>
       </View>
       
       <View style={styles.formBox}>
@@ -83,11 +85,36 @@ const styles = StyleSheet.create({
   brandContainer: {
     alignItems: 'center',
     marginBottom: 40,
+    width: '100%',
+    maxWidth: 350,
   },
   logoImage: {
-    width: 300,
-    height: 120,
-    marginBottom: 20,
+    width: 280,
+    height: 110,
+    marginVertical: 0,
+  },
+  welcomeText: {
+    fontSize: 24,
+    color: '#444',
+    fontWeight: '700',
+    fontFamily: 'System',
+    letterSpacing: 0.75,
+    textTransform: 'uppercase',
+    marginTop: 0,
+    marginBottom: 0,
+    textAlign: 'center',
+    opacity: 0.95,
+  },
+  appText: {
+    fontSize: 20,
+    color: '#2196F3',
+    fontWeight: '800',
+    fontFamily: 'System',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginTop: 4,
+    textAlign: 'center',
+    opacity: 0.9,
   },
   subHeader: {
     fontSize: 20,

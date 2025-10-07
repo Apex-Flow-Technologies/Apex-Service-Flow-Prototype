@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Home, Ticket, SquarePlus, CircleUser } from "lucide-react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, View } from 'react-native';
 
 // Try to require expo-navigation-bar at runtime. We do this so iOS and
 // environments without the package won't crash during bundling.
@@ -80,7 +80,8 @@ export default function TabLayout() {
           height: TAB_BAR_HEIGHT + insets.bottom,
           paddingBottom: insets.bottom,
           backgroundColor: '#2196F3',
-          borderTopWidth: 0,
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(255, 255, 255, 0.1)',
           elevation: 0,
           shadowColor: 'transparent',
           shadowOpacity: 0,
@@ -88,10 +89,10 @@ export default function TabLayout() {
         },
         
         tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.6)',
         
         tabBarLabelStyle: {
-          fontWeight: '500',
+          fontWeight: '600',
           fontSize: 11,
           marginTop: 0,
           marginBottom: 6,
@@ -100,37 +101,46 @@ export default function TabLayout() {
         tabBarIconStyle: {
           marginBottom: 0,
         },
+        
+        tabBarItemStyle: {
+          paddingVertical: 6,
+          backgroundColor: 'transparent',
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <Home color={color} size={22}/>, 
-          // OPTION: Apply padding to content of individual screens if they scroll
-          // and need to clear the tab bar.
-          // For most screens, you'd apply this to the main View/ScrollView style.
-          // example: style={{ paddingBottom: TAB_BAR_TOTAL_HEIGHT }}
+          tabBarIcon: ({ color }) => (
+            <Home color={color} size={26} />
+          ),
         }}
       />
       <Tabs.Screen
         name="Tickets"
         options={{
           title: 'Tickets',
-          tabBarIcon: ({ color }) => <Ticket color={color} size={22} />, 
+          tabBarIcon: ({ color }) => (
+            <Ticket color={color} size={26} />
+          ),
         }}
       />
       <Tabs.Screen
         name="RaiseTicket"
         options={{
           title: 'Raise Ticket',
-          tabBarIcon: ({ color }) => <SquarePlus color={color} size={22}/>, 
+          tabBarIcon: ({ color }) => (
+            <SquarePlus color={color} size={26} />
+          ),
         }}
       />
       <Tabs.Screen
         name="Profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <CircleUser color={color} size={22}/>, 
+          tabBarIcon: ({ color }) => (
+            <CircleUser color={color} size={26} />
+          ),
         }}
       />
     </Tabs>

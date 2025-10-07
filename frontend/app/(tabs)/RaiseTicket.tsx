@@ -75,7 +75,7 @@ export default function RaiseTicket() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
         <View style={styles.card}>
           <Text style={styles.title}>New Service Request</Text>
           <Text style={styles.helper}>
@@ -112,7 +112,7 @@ export default function RaiseTicket() {
                     ? MACHINE_MODELS.filter((m) => m.toLowerCase().includes(q))
                     : MACHINE_MODELS.slice(0, 3); // only 3 recommendations when empty
                   return (
-                    <ScrollView keyboardShouldPersistTaps="handled">
+                    <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
                       {filtered.length === 0 ? (
                         <Text style={styles.noResults}>No matches</Text>
                       ) : (

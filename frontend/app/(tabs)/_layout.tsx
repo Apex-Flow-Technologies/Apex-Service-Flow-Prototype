@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Home, Ticket, SquarePlus, CircleUser } from "lucide-react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 
 // Try to require expo-navigation-bar at runtime. We do this so iOS and
 // environments without the package won't crash during bundling.
@@ -37,28 +37,32 @@ export default function TabLayout() {
   // This is just the bar height + safe area bottom inset.
   const TAB_BAR_TOTAL_HEIGHT = TAB_BAR_HEIGHT + insets.bottom; 
   useEffect(() => {
-    // Only run on Android and when expo-navigation-bar is available.
-    if (Platform.OS === 'android' && NavigationBar && NavigationBar.setBackgroundColorAsync) {
-      try {
-        // Set nav bar background color to match the app footer and use light
-        // button style so icons are white on the blue background.
-        NavigationBar.setBackgroundColorAsync('#2196F3');
-        if (NavigationBar.setButtonStyle) NavigationBar.setButtonStyle('light');
-      } catch (e) {
-        // Best-effort only; swallow errors.
-      }
-    }
-
-    return () => {
-      // Reset to a neutral background on unmount if API available.
+    const setNavigationBarColor = () => {
+      // Only run on Android and when expo-navigation-bar is available.
       if (Platform.OS === 'android' && NavigationBar && NavigationBar.setBackgroundColorAsync) {
         try {
+          // Set nav bar to white background with dark (black) icons
           NavigationBar.setBackgroundColorAsync('#FFFFFF');
           if (NavigationBar.setButtonStyle) NavigationBar.setButtonStyle('dark');
         } catch (e) {
-          // ignore
+          // Best-effort only; swallow errors.
         }
       }
+    };
+
+    // Set initial color
+    setNavigationBarColor();
+
+    // Add app state change listener to reapply color when app comes to foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        setNavigationBarColor();
+      }
+    });
+
+    // Only remove the app state listener, but let the navigation bar color persist
+    return () => {
+      subscription.remove();
     };
   }, []);
 

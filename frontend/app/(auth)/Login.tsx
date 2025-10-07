@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 
 export default function Login() {
@@ -26,15 +26,20 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <View style={{ alignItems: 'center', marginBottom: 10 }}>
-        <Text style={styles.header}>Welcome back to</Text>
-        <Text style={styles.brand}>Apex Service Flow</Text>
+      <View style={styles.brandContainer}>
+        <Image
+          source={require('../../assets/images/techno-bright-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
-      <Text style={styles.subHeader}>Login to your account</Text>
+      
       <View style={styles.formBox}>
+        <Text style={styles.subHeader}>Login to your account</Text>
         <TextInput
           style={styles.input}
           placeholder="Email Address"
+          placeholderTextColor="#666"
           keyboardType="email-address"
           value={form.email}
           onChangeText={v => handleChange('email', v)}
@@ -42,6 +47,7 @@ export default function Login() {
         <TextInput
           style={styles.input}
           placeholder="Password"
+          placeholderTextColor="#666"
           secureTextEntry
           value={form.password}
           onChangeText={v => handleChange('password', v)}
@@ -61,7 +67,6 @@ export default function Login() {
         <TouchableOpacity style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>Login</Text>
         </TouchableOpacity>
-        
       </View>
     </View>
   );
@@ -75,87 +80,94 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
   },
-  header: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#222',
+  brandContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logoImage: {
+    width: 300,
+    height: 120,
+    marginBottom: 20,
   },
   subHeader: {
-    fontSize: 15,
-    color: '#888',
+    fontSize: 20,
+    color: '#444',
     marginBottom: 24,
-  },
-  brand: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#1e90ff',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   formBox: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 350,
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   input: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    marginBottom: 14,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    color: '#333',
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 20,
+    marginTop: 4,
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#bbb',
-    marginRight: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#2196F3',
+    marginRight: 8,
     backgroundColor: '#fff',
   },
   checkboxChecked: {
-    backgroundColor: '#1e90ff',
-    borderColor: '#1e90ff',
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
   },
   checkboxLabel: {
-    color: '#888',
-    fontSize: 14,
+    color: '#666',
+    fontSize: 15,
   },
   forgot: {
-    color: '#1e90ff',
-    fontWeight: 'bold',
-    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '600',
+    fontSize: 15,
   },
   button: {
-    backgroundColor: '#1e90ff',
-    borderRadius: 24,
-    paddingVertical: 12,
+    backgroundColor: '#2196F3',
+    borderRadius: 12,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 10,
+    shadowColor: '#2196F3',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 17,
+    fontWeight: '600',
+    fontSize: 18,
   },
   footerRow: {
     flexDirection: 'row',

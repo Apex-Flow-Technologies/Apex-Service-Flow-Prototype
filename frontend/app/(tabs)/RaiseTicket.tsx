@@ -13,6 +13,7 @@ import {
   SafeAreaView,
   Keyboard,
   Pressable,
+  Dimensions,
 } from "react-native"
 import Toast from "react-native-root-toast"
 import { Ionicons } from "@expo/vector-icons"
@@ -33,6 +34,8 @@ const MACHINE_MODELS = [
 const CATEGORIES = ["Mechanical", "Electrical", "Software", "Other"]
 
 const OPTION_ROW_HEIGHT = 48 // fixed visible rows to 4 and consistent item layout for better scrolling
+const { height: WINDOW_HEIGHT } = Dimensions.get("window")
+const DROPDOWN_MAX_HEIGHT = Math.min(OPTION_ROW_HEIGHT * 3, Math.floor(WINDOW_HEIGHT * 0.5))
 
 export default function RaiseTicket() {
   const [model, setModel] = useState("")
@@ -148,43 +151,40 @@ export default function RaiseTicket() {
               />
             </View>
             {showModelSuggestions && (
-              <>
-                <Pressable style={styles.backdrop} onPress={() => setShowModelSuggestions(false)} />
-
-                <View style={styles.suggestionsDropdown}>
-                  {filteredModels.length > 0 ? (
-                    <ScrollView
-                      keyboardShouldPersistTaps="handled"
-                      keyboardDismissMode="on-drag"
-                      showsVerticalScrollIndicator
-                      nestedScrollEnabled
-                      style={{ maxHeight: OPTION_ROW_HEIGHT * 4 }}
-                    >
-                      {filteredModels.map((item) => (
-                        <View key={item}>
-                          <TouchableOpacity
-                            style={[styles.inlineOption, { minHeight: OPTION_ROW_HEIGHT }]}
-                            onPress={() => {
-                              setModel(item)
-                              setModelQuery(item)
-                              setShowModelSuggestions(false)
-                              Keyboard.dismiss()
-                            }}
-                          >
-                            <Text style={styles.inlineOptionText}>{item}</Text>
-                          </TouchableOpacity>
-                          <View style={styles.inlineSeparator} />
-                        </View>
-                      ))}
-                    </ScrollView>
-                  ) : (
-                    <View style={styles.noResultsContainer}>
-                      <Ionicons name="search" size={16} color="#6b7280" />
-                      <Text style={styles.noResults}>No matches</Text>
-                    </View>
-                  )}
-                </View>
-              </>
+              <View style={styles.suggestionsDropdown}>
+                {filteredModels.length > 0 ? (
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator
+                    persistentScrollbar
+                    style={{ maxHeight: DROPDOWN_MAX_HEIGHT }}
+                    contentContainerStyle={{ paddingVertical: 2 }}
+                  >
+                    {filteredModels.map((item) => (
+                      <View key={item}>
+                        <TouchableOpacity
+                          style={[styles.inlineOption, { minHeight: OPTION_ROW_HEIGHT }]}
+                          onPress={() => {
+                            setModel(item)
+                            setModelQuery(item)
+                            setShowModelSuggestions(false)
+                            Keyboard.dismiss()
+                          }}
+                        >
+                          <Text style={styles.inlineOptionText}>{item}</Text>
+                        </TouchableOpacity>
+                        <View style={styles.inlineSeparator} />
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.noResultsContainer}>
+                    <Ionicons name="search" size={16} color="#6b7280" />
+                    <Text style={styles.noResults}>No matches</Text>
+                  </View>
+                )}
+              </View>
             )}
             {!isModelFocused && modelQuery.length > 0 && !isModelValid && (
               <Text style={styles.invalidHint}>Select the option for valid input</Text>
@@ -357,18 +357,12 @@ const styles = StyleSheet.create({
   inlineOptionText: { fontSize: 14, color: "#222" },
   inlineSeparator: { height: 1, backgroundColor: "#999999" },
   suggestionsDropdown: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
     backgroundColor: "#eeeeee",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E0E0E0",
     marginTop: 6,
     overflow: "hidden",
-    zIndex: 20, // above backdrop
-    elevation: 16,
   },
   backdrop: {
     position: "absolute",

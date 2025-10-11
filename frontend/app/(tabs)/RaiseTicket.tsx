@@ -64,6 +64,7 @@ export default function RaiseTicket() {
       position: Toast.positions.BOTTOM,
       backgroundColor: "#2E86DE",
       textColor: "#fff",
+      containerStyle: { marginBottom: 60 },
     })
   }
 
@@ -79,6 +80,7 @@ export default function RaiseTicket() {
         position: Toast.positions.BOTTOM,
         backgroundColor: "#e67e22",
         textColor: "#fff",
+        containerStyle: { marginBottom: 60 },
       })
       return
     }

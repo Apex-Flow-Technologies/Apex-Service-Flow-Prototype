@@ -5,6 +5,7 @@ const _layout = () => {
   return (
     <View>
       <Text>_layout</Text>
+      <Text>dummy page</Text>
     </View>
   )
 }

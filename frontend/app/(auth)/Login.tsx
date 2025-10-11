@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 
 export default function Login() {
@@ -25,6 +24,8 @@ export default function Login() {
     password: '',
     remember: false,
   });
+
+  const [showPassword, setShowPassword] = useState(false);
 
   // Animation refs for each input
   const emailScale = useRef(new Animated.Value(1)).current;
@@ -93,12 +94,9 @@ export default function Login() {
           <Text style={styles.subHeader}>Login to your account</Text>
 
           {/* Email Input */}
-          <Animated.View style={{ transform: [{ scale: emailScale }] }}>
+          <Animated.View style={{ transform: [{ scale: emailScale }], marginBottom: 16 }}>
             <TextInput
-              style={[
-                styles.input,
-                form.email.length > 0 && { borderColor: '#2196F3' },
-              ]}
+              style={[styles.input, form.email.length > 0 && { borderColor: '#2196F3' }]}
               placeholder="Email Address"
               placeholderTextColor="#666"
               keyboardType="email-address"
@@ -109,21 +107,31 @@ export default function Login() {
             />
           </Animated.View>
 
-          {/* Password Input */}
-          <Animated.View style={{ transform: [{ scale: passScale }] }}>
-            <TextInput
-              style={[
-                styles.input,
-                form.password.length > 0 && { borderColor: '#2196F3' },
-              ]}
-              placeholder="Password"
-              placeholderTextColor="#666"
-              secureTextEntry
-              value={form.password}
-              onChangeText={v => handleChange('password', v)}
-              onFocus={() => handleFocus(passScale)}
-              onBlur={() => handleBlur(passScale)}
-            />
+          {/* Password Input with Eye Icon */}
+          <Animated.View style={{ transform: [{ scale: passScale }], marginBottom: 16 }}>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Password"
+                placeholderTextColor="#666"
+                secureTextEntry={!showPassword}
+                value={form.password}
+                onChangeText={v => handleChange('password', v)}
+                onFocus={() => handleFocus(passScale)}
+                onBlur={() => handleBlur(passScale)}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye' : 'eye-off'}
+                  size={22}
+                  color="#666"
+                />
+              </TouchableOpacity>
+            </View>
           </Animated.View>
 
           {/* Remember Me + Forgot */}
@@ -217,10 +225,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     color: '#333',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    padding: 0,
+    margin: 0,
+  },
+  eyeIcon: {
+    marginLeft: 8,
+    padding: 4,
   },
   row: {
     flexDirection: 'row',

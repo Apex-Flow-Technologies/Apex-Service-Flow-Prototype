@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Link } from 'expo-router';
+import type { Href } from 'expo-router';
 
 export default function Login() {
   const router = useRouter();
@@ -51,13 +53,20 @@ export default function Login() {
   };
 
   const handleLogin = () => {
-    const DUMMY_EMAIL = 'user@example.com';
-    const DUMMY_PASSWORD = 'password123';
+    const USERS = {
+      user: { email: "user@example.com", password: "password123", route: '/(tabs)' },
+      technician: { email: "technician@example.com", password: "password123", route: '/(technicianTabs)' },
+      manager: { email: "manager@example.com", password: "password123", route: '/(managerTabs)' },
+    } as const satisfies Record<string, { email: string; password: string; route: Href }>
 
-    if (form.email === DUMMY_EMAIL && form.password === DUMMY_PASSWORD) {
-      router.replace('/(tabs)');
+    const matchedUser = Object.values(USERS).find(
+      (u) => u.email === form.email && u.password === form.password
+    )
+
+    if (matchedUser) {
+      router.replace(matchedUser.route)
     } else {
-      Alert.alert('Login Failed', 'Invalid username or password.');
+      Alert.alert('Login Failed', 'Invalid username or password.')
     }
   };
 

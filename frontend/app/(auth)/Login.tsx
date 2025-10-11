@@ -1,22 +1,59 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Animated,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 export default function Login() {
   const router = useRouter();
+
   const [form, setForm] = useState({
     email: '',
     password: '',
     remember: false,
   });
+
+  // Animation refs for each input
+  const emailScale = useRef(new Animated.Value(1)).current;
+  const passScale = useRef(new Animated.Value(1)).current;
+
+  const handleFocus = (animRef: Animated.Value) => {
+    Animated.spring(animRef, {
+      toValue: 1.03,
+      useNativeDriver: true,
+      speed: 15,
+      bounciness: 10,
+    }).start();
+  };
+
+  const handleBlur = (animRef: Animated.Value) => {
+    Animated.spring(animRef, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 15,
+      bounciness: 6,
+    }).start();
+  };
+
   const handleChange = (key: string, value: string | boolean) => {
     setForm({ ...form, [key]: value });
   };
 
   const handleLogin = () => {
-    // Dummy credentials
     const DUMMY_EMAIL = 'user@example.com';
     const DUMMY_PASSWORD = 'password123';
+
     if (form.email === DUMMY_EMAIL && form.password === DUMMY_PASSWORD) {
       router.replace('/(tabs)');
     } else {
@@ -25,62 +62,97 @@ export default function Login() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.brandContainer}>
-        <Text style={styles.welcomeText}>Welcome to</Text>
-        <Image
-          source={require('../../assets/images/techno-bright-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-        <Text style={styles.appText}>Service Request App</Text>
-      </View>
-      
-      <View style={styles.formBox}>
-        <Text style={styles.subHeader}>Login to your account</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Email Address"
-          placeholderTextColor="#666"
-          keyboardType="email-address"
-          value={form.email}
-          onChangeText={v => handleChange('email', v)}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#666"
-          secureTextEntry
-          value={form.password}
-          onChangeText={v => handleChange('password', v)}
-        />
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={styles.checkboxContainer}
-            onPress={() => handleChange('remember', !form.remember)}
-          >
-            <View style={[styles.checkbox, form.remember && styles.checkboxChecked]} />
-            <Text style={styles.checkboxLabel}>Remember me</Text>
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Text style={styles.forgot}>Forgot Password?</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={{ flex: 1 }}
+    >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.brandContainer}>
+          <Text style={styles.welcomeText}>Welcome to</Text>
+          <Image
+            source={require('../../assets/images/techno-bright-logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.appText}>Service Request App</Text>
+        </View>
+
+        <View style={styles.formBox}>
+          <Text style={styles.subHeader}>Login to your account</Text>
+
+          {/* Email Input */}
+          <Animated.View style={{ transform: [{ scale: emailScale }] }}>
+            <TextInput
+              style={[
+                styles.input,
+                form.email.length > 0 && { borderColor: '#2196F3' },
+              ]}
+              placeholder="Email Address"
+              placeholderTextColor="#666"
+              keyboardType="email-address"
+              value={form.email}
+              onChangeText={v => handleChange('email', v)}
+              onFocus={() => handleFocus(emailScale)}
+              onBlur={() => handleBlur(emailScale)}
+            />
+          </Animated.View>
+
+          {/* Password Input */}
+          <Animated.View style={{ transform: [{ scale: passScale }] }}>
+            <TextInput
+              style={[
+                styles.input,
+                form.password.length > 0 && { borderColor: '#2196F3' },
+              ]}
+              placeholder="Password"
+              placeholderTextColor="#666"
+              secureTextEntry
+              value={form.password}
+              onChangeText={v => handleChange('password', v)}
+              onFocus={() => handleFocus(passScale)}
+              onBlur={() => handleBlur(passScale)}
+            />
+          </Animated.View>
+
+          {/* Remember Me + Forgot */}
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={styles.checkboxContainer}
+              onPress={() => handleChange('remember', !form.remember)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, form.remember && styles.checkboxChecked]}>
+                {form.remember && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
+              <Text style={styles.checkboxLabel}>Remember me</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity>
+              <Text style={styles.forgot}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Login Button */}
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>Login</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Login</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#fafbfc',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     padding: 16,
+    paddingTop: 60,
   },
   brandContainer: {
     alignItems: 'center',
@@ -91,17 +163,13 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 280,
     height: 110,
-    marginVertical: 0,
   },
   welcomeText: {
     fontSize: 24,
     color: '#444',
     fontWeight: '700',
-    fontFamily: 'System',
     letterSpacing: 0.75,
     textTransform: 'uppercase',
-    marginTop: 0,
-    marginBottom: 0,
     textAlign: 'center',
     opacity: 0.95,
   },
@@ -109,7 +177,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#2196F3',
     fontWeight: '800',
-    fontFamily: 'System',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginTop: 4,
@@ -151,7 +218,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    marginTop: 4,
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -165,6 +231,8 @@ const styles = StyleSheet.create({
     borderColor: '#2196F3',
     marginRight: 8,
     backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkboxChecked: {
     backgroundColor: '#2196F3',
@@ -195,19 +263,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 18,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  footerText: {
-    color: '#888',
-    fontSize: 14,
-  },
-  link: {
-    color: '#1e90ff',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
 });

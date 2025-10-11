@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
   },
-  selectText: { color: "#9AA0A6", fontSize: 14 },
+  selectText: { color: "#9AA0A6", fontSize: 14},
   selectTextSelected: { color: "#222", fontSize: 14 },
   row: {
     flexDirection: "row",
@@ -348,6 +348,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
     marginTop: 6,
+    borderRadius: 12,
     overflow: "hidden",
   },
   inlineOption: {

@@ -1,3 +1,8 @@
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../../firebaseConfig"; // adjust if needed
+// import { router } from "expo-router";
+
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -53,23 +58,55 @@ export default function Login() {
     setForm({ ...form, [key]: value });
   };
 
-  const handleLogin = () => {
-    const USERS = {
-      user: { email: "user@example.com", password: "password123", route: '/(tabs)' },
-      technician: { email: "technician@example.com", password: "password123", route: '/(technicianTabs)' },
-      manager: { email: "manager@example.com", password: "password123", route: '/(managerTabs)' },
-    } as const satisfies Record<string, { email: string; password: string; route: Href }>
+    // LOGIN FUNCTION (added the routing to particular folders)
+  const handleLogin = async () => {
+  if (!form.email || !form.password) {
+    Alert.alert("Missing Info", "Please enter both email and password.");
+    return;
+  }
 
-    const matchedUser = Object.values(USERS).find(
-      (u) => u.email === form.email && u.password === form.password
-    )
+  try {
+    // signin (auth)
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      form.email,
+      form.password
+    );
 
-    if (matchedUser) {
-      router.replace(matchedUser.route)
-    } else {
-      Alert.alert('Login Failed', 'Invalid username or password.')
+    // Debug: log UID
+    // console.log("Login success, UID:", userCredential.user.uid);
+    // Alert.alert("Login Success", `UID: ${userCredential.user.uid}`);
+
+
+    //  Fetch role from Firestore
+    const uid = userCredential.user.uid;
+    const userDoc = await getDoc(doc(db, "user", uid));
+
+    if (!userDoc.exists()) {
+      Alert.alert("Error", "User data not found in Firestore.");
+      return;
     }
-  };
+
+    const { role } = userDoc.data();
+
+    // Route based on role
+    if (role === "manager") router.replace("/(managerTabs)");
+    else if (role === "technician") router.replace("/(technicianTabs)");
+    else if (role === "user") router.replace("/(tabs)");
+    else Alert.alert("Unknown Role", "This account has no valid role assigned.");
+
+  } catch (error: any) {
+    // Only triggered if Auth fails
+    console.log("Login failed:", error.code, error.message);
+    Alert.alert("Login Failed", `${error.code}: ${error.message}`);
+  }
+};
+
+// const handleLogin = () => { const USERS = 
+//   { user: { email: "user@example.com", password: "password123", route: '/(tabs)' }, 
+//   technician: { email: "technician@example.com", password: "password123", route: '/(technicianTabs)' }, 
+//   manager: { email: "manager@example.com", password: "password123", route: '/(managerTabs)' }, 
+// } as const satisfies Record<string, { email: string; password: string; route: Href }>
 
   return (
     <KeyboardAvoidingView

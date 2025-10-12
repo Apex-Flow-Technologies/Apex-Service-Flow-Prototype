@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     padding: 16,
-    paddingTop: 60,
+    paddingTop: 100,
   },
   brandContainer: {
     alignItems: 'center',

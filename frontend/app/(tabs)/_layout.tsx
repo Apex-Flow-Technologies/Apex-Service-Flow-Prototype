@@ -1,148 +1,136 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Home, Ticket, SquarePlus, CircleUser } from "lucide-react-native";
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
-import { Platform, AppState, View } from 'react-native';
+import { Home, Ticket, SquarePlus, CircleUser } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Platform, AppState, View, StyleSheet } from 'react-native';
+import { HapticTab } from '@/components/haptic-tab';
 
-// Try to require expo-navigation-bar at runtime. We do this so iOS and
-// environments without the package won't crash during bundling.
 let NavigationBar: any = null;
 try {
   NavigationBar = require('expo-navigation-bar');
 } catch (e) {
   NavigationBar = null;
 }
-if (!NavigationBar) {
-  // created for the upcoming updates
-  // Helpful runtime log so developers know the platform API is missing.
-  // Metro logs will show this when running the app.
-  // If you see this message, install the package with:
-  //   expo install expo-navigation-bar
-  // Then rebuild a dev client or standalone app to test.
-  // (Expo Go won't surface native modules added after the app was built.)
-  // eslint-disable-next-line no-console
-  console.warn('[app/(tabs)/_layout] expo-navigation-bar is not installed or unavailable. System nav color change is disabled.');
-}
-
-import { HapticTab } from '@/components/haptic-tab';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  
-  // No BOTTOM_MARGIN needed for a fixed-bottom bar, as it will sit flush with insets.
   const TAB_BAR_HEIGHT = 64;
-  const BACKGROUND_COLOR = '#E8ECF5'; 
-  
-  // Calculate the total height the screen content needs to clear.
-  // This is just the bar height + safe area bottom inset.
-  const TAB_BAR_TOTAL_HEIGHT = TAB_BAR_HEIGHT + insets.bottom; 
-  useEffect(() => {
-    const setNavigationBarColor = () => {
-      // Only run on Android and when expo-navigation-bar is available.
-      if (Platform.OS === 'android' && NavigationBar && NavigationBar.setBackgroundColorAsync) {
-        try {
-          // Set nav bar to white background with dark (black) icons
-          NavigationBar.setBackgroundColorAsync('#FFFFFF');
-          if (NavigationBar.setButtonStyle) NavigationBar.setButtonStyle('dark');
-        } catch (e) {
-          // Best-effort only; swallow errors.
-        }
+
+  // Colors
+  const TAB_BAR_COLOR = '#2196F3';   // blue tab footer
+  const SYSTEM_NAV_BG = '#FFFFFF';   // white system navigation background
+  const ACTIVE_COLOR = '#FFFFFF';    // active icon
+  const INACTIVE_COLOR = 'rgba(255,255,255,0.6)';
+
+  const applyNavStyle = async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      if (NavigationBar?.setButtonStyle) {
+        await NavigationBar.setButtonStyle('dark'); // dark system buttons
       }
-    };
+      if (NavigationBar?.setBackgroundColorAsync) {
+        await NavigationBar.setBackgroundColorAsync(SYSTEM_NAV_BG); // white nav background
+      }
+    } catch (err) {
+      console.warn('NavigationBar style apply failed:', err);
+    }
+  };
 
-    // Set initial color
-    setNavigationBarColor();
+  useEffect(() => {
+    applyNavStyle();
 
-    // Add app state change listener to reapply color when app comes to foreground
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        setNavigationBarColor();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        // 🕐 Small delay to ensure it applies AFTER app resumes rendering
+        setTimeout(applyNavStyle, 300);
       }
     });
 
-    // Only remove the app state listener, but let the navigation bar color persist
-    return () => {
-      subscription.remove();
-    };
+    return () => sub.remove();
   }, []);
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarButton: HapticTab,
-        
-        tabBarStyle: {
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: TAB_BAR_HEIGHT + insets.bottom,
-          paddingBottom: insets.bottom,
-          backgroundColor: '#2196F3',
-          borderTopWidth: 1,
-          borderTopColor: 'rgba(255, 255, 255, 0.1)',
-          elevation: 0,
-          shadowColor: 'transparent',
-          shadowOpacity: 0,
-          shadowOffset: { width: 0, height: 0 },
-        },
-        
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.6)',
-        
-        tabBarLabelStyle: {
-          fontWeight: '600',
-          fontSize: 11,
-          marginTop: 0,
-          marginBottom: 6,
-        },
-        
-        tabBarIconStyle: {
-          marginBottom: 0,
-        },
-        
-        tabBarItemStyle: {
-          paddingVertical: 6,
-          backgroundColor: 'transparent',
-        },
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <Home color={color} size={26} />
-          ),
-        }}
+    <>
+      {/* white strip behind system nav buttons */}
+      <View
+        style={[
+          styles.systemNavStrip,
+          {
+            backgroundColor: SYSTEM_NAV_BG,
+            height: insets.bottom || 24,
+          },
+        ]}
+        pointerEvents="none"
       />
-      <Tabs.Screen
-        name="Tickets"
-        options={{
-          title: 'Tickets',
-          tabBarIcon: ({ color }) => (
-            <Ticket color={color} size={26} />
-          ),
+
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarButton: HapticTab,
+          tabBarStyle: {
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: TAB_BAR_HEIGHT + insets.bottom,
+            paddingBottom: insets.bottom,
+            backgroundColor: TAB_BAR_COLOR,
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(255, 255, 255, 0.1)',
+            elevation: 0,
+            shadowColor: 'transparent',
+            zIndex: 10,
+          },
+          tabBarActiveTintColor: ACTIVE_COLOR,
+          tabBarInactiveTintColor: INACTIVE_COLOR,
+          tabBarLabelStyle: {
+            fontWeight: '600',
+            fontSize: 11,
+            marginBottom: 6,
+          },
+          tabBarIconStyle: { marginBottom: 0 },
+          tabBarItemStyle: { paddingVertical: 6, backgroundColor: 'transparent' },
         }}
-      />
-      <Tabs.Screen
-        name="RaiseTicket"
-        options={{
-          title: 'Raise Ticket',
-          tabBarIcon: ({ color }) => (
-            <SquarePlus color={color} size={26} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="Profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <CircleUser color={color} size={26} />
-          ),
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color }) => <Home color={color} size={26} />,
+          }}
+        />
+        <Tabs.Screen
+          name="Tickets"
+          options={{
+            title: 'Tickets',
+            tabBarIcon: ({ color }) => <Ticket color={color} size={26} />,
+          }}
+        />
+        <Tabs.Screen
+          name="RaiseTicket"
+          options={{
+            title: 'Raise Ticket',
+            tabBarIcon: ({ color }) => <SquarePlus color={color} size={26} />,
+          }}
+        />
+        <Tabs.Screen
+          name="Profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color }) => <CircleUser color={color} size={26} />,
+          }}
+        />
+      </Tabs>
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  systemNavStrip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+});

@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-// Home screen uses static demo content; tickets list lives under the Tickets tab
 
-const userProfileImage = 'https://randomuser.me/api/portraits/women/68.jpg'; // Replace with your actual image
+// Home screen uses static demo content
+const userProfileImage = 'https://randomuser.me/api/portraits/women/68.jpg';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -25,6 +25,26 @@ export default function HomeScreen() {
               <Text style={styles.memberSince}>Member since 2022</Text>
             </View>
           </View>
+
+          {/* --- START: MORE COMPACT STATS SECTION --- */}
+          <View style={styles.statsRow}>
+            <TouchableOpacity style={[styles.statCard, styles.statCardOpen]}>
+              <Ionicons name="folder-open-outline" size={20} color="#FFA000" />
+              <Text style={styles.statNumber}>3</Text>
+              <Text style={styles.statLabel}>Open</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.statCard, styles.statCardProgress]}>
+              <Ionicons name="sync-circle-outline" size={20} color="#1976D2" />
+              <Text style={styles.statNumber}>2</Text>
+              <Text style={styles.statLabel}>On Progress</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.statCard, styles.statCardCompleted]}>
+              <Ionicons name="checkmark-done-circle-outline" size={20} color="#388E3C" />
+              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statLabel}>Completed</Text>
+            </TouchableOpacity>
+          </View>
+          {/* --- END: MORE COMPACT STATS SECTION --- */}
         </View>
 
         {/* Tickets Container */}
@@ -56,13 +76,13 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Raise Ticket Button above footer */}
+        {/* Raise Ticket Button */}
         <TouchableOpacity style={styles.raiseTicketButton} onPress={() => router.push('/(tabs)/RaiseTicket')}>
           <Ionicons name="add" size={18} color="#fff" />
           <Text style={styles.raiseTicketText}>Raise New Ticket</Text>
         </TouchableOpacity>
 
-        {/* Add space at the bottom for tab bar */}
+        {/* Spacer for tab bar */}
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
@@ -79,7 +99,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 18,
-    paddingTop: 60, // The value has been increased to 60 for more space
+    paddingTop: 40,
     paddingBottom: 0,
   },
   profileContainer: {
@@ -93,6 +113,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 18,
   },
+  // --- START: ADJUSTED STYLES FOR STATS ---
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -100,14 +121,38 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#F7F9FC',
-    borderRadius: 12,
-    paddingVertical: 10,
+    borderRadius: 16,
+    paddingVertical: 10, // Reduced from 12
     marginHorizontal: 4,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  statNumber: { fontSize: 16, fontWeight: '800', color: '#222' },
-  statLabel: { fontSize: 11, color: '#667085', marginTop: 2 },
+  statCardOpen: {
+    backgroundColor: '#FFF8E1',
+  },
+  statCardProgress: {
+    backgroundColor: '#E3F2FD',
+  },
+  statCardCompleted: {
+    backgroundColor: '#E8F5E9',
+  },
+  statNumber: {
+    fontSize: 18, // Reduced from 20
+    fontWeight: 'bold',
+    color: '#212121',
+    marginTop: 5, // Reduced from 6
+  },
+  statLabel: {
+    fontSize: 10, // Reduced from 11
+    color: '#616161',
+    marginTop: 2, // Reduced from 3
+    fontWeight: '600',
+  },
+  // --- END: ADJUSTED STYLES ---
   ticketsContainer: {
     backgroundColor: '#fff',
     borderRadius: 24,
@@ -122,7 +167,7 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 26,
+    marginBottom: 16,
   },
   profilePicWrapper: {
     position: 'relative',
@@ -132,7 +177,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#eaeaea',
   },
   badge: {
     position: 'absolute',
@@ -176,13 +220,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     alignItems: 'center',
   },
-  statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-  },
-  statusPillText: { color: '#fff', fontSize: 12, fontWeight: '700', textTransform: 'lowercase' },
   ticketId: {
     fontWeight: '600',
     color: '#363636',

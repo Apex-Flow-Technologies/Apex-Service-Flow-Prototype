@@ -1,7 +1,6 @@
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebaseConfig"; // adjust if needed
-// import { router } from "expo-router";
 
 import React, { useState, useRef } from 'react';
 import {
@@ -16,13 +15,16 @@ import {
   Platform,
   ScrollView,
   Animated,
+  ActivityIndicator, // <-- Import ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import type { Href } from 'expo-router';
 
 export default function Login() {
   const router = useRouter();
+
+  // Add the new loading state
+  const [isLoading, setIsLoading] = useState(false);
 
   const [form, setForm] = useState({
     email: '',
@@ -58,55 +60,48 @@ export default function Login() {
     setForm({ ...form, [key]: value });
   };
 
-    // LOGIN FUNCTION (added the routing to particular folders)
+  // UPDATED LOGIN FUNCTION
   const handleLogin = async () => {
-  if (!form.email || !form.password) {
-    Alert.alert("Missing Info", "Please enter both email and password.");
-    return;
-  }
-
-  try {
-    // signin (auth)
-    const userCredential = await signInWithEmailAndPassword(
-      auth,
-      form.email,
-      form.password
-    );
-
-    // Debug: log UID
-    // console.log("Login success, UID:", userCredential.user.uid);
-    // Alert.alert("Login Success", `UID: ${userCredential.user.uid}`);
-
-
-    //  Fetch role from Firestore
-    const uid = userCredential.user.uid;
-    const userDoc = await getDoc(doc(db, "user", uid));
-
-    if (!userDoc.exists()) {
-      Alert.alert("Error", "User data not found in Firestore.");
+    if (!form.email || !form.password) {
+      Alert.alert("Missing Info", "Please enter both email and password.");
       return;
     }
 
-    const { role } = userDoc.data();
+    setIsLoading(true); // <-- Start loading
 
-    // Route based on role
-    if (role === "manager") router.replace("/(managerTabs)");
-    else if (role === "technician") router.replace("/(technicianTabs)");
-    else if (role === "user") router.replace("/(tabs)");
-    else Alert.alert("Unknown Role", "This account has no valid role assigned.");
+    try {
+      // signin (auth)
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        form.email,
+        form.password
+      );
 
-  } catch (error: any) {
-    // Only triggered if Auth fails
-    console.log("Login failed:", error.code, error.message);
-    Alert.alert("Login Failed", `${error.code}: ${error.message}`);
-  }
-};
+      // Fetch role from Firestore
+      const uid = userCredential.user.uid;
+      const userDoc = await getDoc(doc(db, "user", uid));
 
-// const handleLogin = () => { const USERS = 
-//   { user: { email: "user@example.com", password: "password123", route: '/(tabs)' }, 
-//   technician: { email: "technician@example.com", password: "password123", route: '/(technicianTabs)' }, 
-//   manager: { email: "manager@example.com", password: "password123", route: '/(managerTabs)' }, 
-// } as const satisfies Record<string, { email: string; password: string; route: Href }>
+      if (!userDoc.exists()) {
+        Alert.alert("Error", "User data not found in Firestore.");
+        return;
+      }
+
+      const { role } = userDoc.data();
+
+      // Route based on role
+      if (role === "manager") router.replace("/(managerTabs)");
+      else if (role === "technician") router.replace("/(technicianTabs)");
+      else if (role === "user") router.replace("/(tabs)");
+      else Alert.alert("Unknown Role", "This account has no valid role assigned.");
+
+    } catch (error: any) {
+      // Only triggered if Auth fails
+      console.log("Login failed:", error.code, error.message);
+      Alert.alert("Login Failed", `${error.code}: ${error.message}`);
+    } finally {
+      setIsLoading(false); // <-- Stop loading, will run on success or failure
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -189,9 +184,20 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
-          {/* Login Button */}
-          <TouchableOpacity style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>Login</Text>
+          {/* UPDATED Login Button */}
+          <TouchableOpacity
+            style={[styles.button, isLoading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.buttonText}>Logging in...</Text>
+              </>
+            ) : (
+              <Text style={styles.buttonText}>Login</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -199,6 +205,7 @@ export default function Login() {
   );
 }
 
+// UPDATED STYLES
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
@@ -332,10 +339,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
+    flexDirection: 'row', // <-- Added to align spinner and text
+    justifyContent: 'center', // <-- Added to align spinner and text
   },
   buttonText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 18,
+  },
+  // New style for the disabled button state
+  buttonDisabled: {
+    backgroundColor: '#90CAF9', // A lighter, disabled-looking color
+    elevation: 0,
+    shadowOpacity: 0,
   },
 });

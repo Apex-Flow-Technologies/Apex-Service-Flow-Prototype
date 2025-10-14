@@ -2,7 +2,7 @@
 
 // @ts-nocheck
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import {
   View,
   Text,
@@ -13,23 +13,25 @@ import {
   SafeAreaView,
   Keyboard,
   Pressable,
+  Modal,
   Dimensions,
 } from "react-native"
 import Toast from "react-native-root-toast"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import * as ImagePicker from "expo-image-picker"
+import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, RecordingPresets } from "expo-audio"
+import { VideoView, useVideoPlayer } from "expo-video"
+import { Image } from "expo-image"
+import { tickets as MOCK_TICKETS } from "@/lib/mock/tickets"
 
-const MACHINE_MODELS = [
+// TODO(backend): Replace PURCHASED_MODELS with Firebase-driven list for the signed-in user.
+// Suggested: store user's purchased models in Firestore under users/{uid}/purchases or a field,
+// and fetch here via a hook/context to populate the dropdown and validation.
+const PURCHASED_MODELS = [
   "Apex 100",
-  "Apex 200",
   "Apex Pro",
   "Apex Ultra",
-  "Apex Pro Max",
-  "Apex Pro Max 2",
-  "Apex Pro Max 3",
-  "Apex Pro Max 4",
-  "Apex Pro Max 5",
-  "Apex Pro Max 6",
 ]
 const CATEGORIES = ["Mechanical", "Electrical", "Software", "Other"]
 
@@ -47,16 +49,100 @@ export default function RaiseTicket() {
   const [isModelFocused, setIsModelFocused] = useState(false)
   const router = useRouter()
 
-  // Model is valid only when user selects one of the given options
-  const isModelValid = !!model && MACHINE_MODELS.includes(model) && modelQuery === model
+  const [attachments, setAttachments] = useState<Array<{ type: "image" | "video" | "audio"; uri: string; durationMs?: number }>>([])
+  const [showMediaOptions, setShowMediaOptions] = useState(false)
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  const recorderState = useAudioRecorderState(audioRecorder)
+  const [viewerVisible, setViewerVisible] = useState(false)
+  const [viewerMedia, setViewerMedia] = useState<{ type: "image" | "video"; uri: string } | null>(null)
+
+  // Model is valid only when user selects one of the purchased options
+  const isModelValid = !!model && PURCHASED_MODELS.includes(model) && modelQuery === model
 
   const handleUpload = () => {
-    // TODO: Integrate media picker
+    setShowMediaOptions((v) => !v)
   }
 
-  const handleAudio = () => {
-    // TODO: Integrate audio recorder
+  const ensureMediaPermissions = async () => {
+    const cam = await ImagePicker.requestCameraPermissionsAsync()
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (cam.status !== "granted" || lib.status !== "granted") {
+      Toast.show("Camera/Library permission is required", { duration: Toast.durations.SHORT })
+      return false
+    }
+    return true
   }
+
+  const pickFromLibrary = async () => {
+    setShowMediaOptions(false)
+    const ok = await ensureMediaPermissions()
+    if (!ok) return
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, allowsEditing: false, quality: 0.8 })
+    if (res.canceled) return
+    const asset = res.assets?.[0]
+    if (!asset) return
+    const type = (asset.type === "video" ? "video" : "image") as "image" | "video"
+    setAttachments((prev) => [...prev, { type, uri: asset.uri }])
+  }
+
+  const capturePhoto = async () => {
+    setShowMediaOptions(false)
+    const ok = await ensureMediaPermissions()
+    if (!ok) return
+    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 })
+    if (res.canceled) return
+    const asset = res.assets?.[0]
+    if (!asset) return
+    setAttachments((prev) => [...prev, { type: "image", uri: asset.uri }])
+  }
+
+  const captureVideo = async () => {
+    setShowMediaOptions(false)
+    const ok = await ensureMediaPermissions()
+    if (!ok) return
+    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, videoMaxDuration: 60, quality: ImagePicker.UIImagePickerControllerQualityType.Medium })
+    if (res.canceled) return
+    const asset = res.assets?.[0]
+    if (!asset) return
+    setAttachments((prev) => [...prev, { type: "video", uri: asset.uri }])
+  }
+
+  const handleAudio = async () => {
+    try {
+      if (recorderState.isRecording) {
+        await stopRecording()
+        return
+      }
+      await audioRecorder.prepareToRecordAsync()
+      audioRecorder.record()
+      Toast.show("Recording... tap mic again to stop", { duration: Toast.durations.SHORT })
+    } catch (e) {
+      Toast.show("Failed to start recording", { duration: Toast.durations.SHORT })
+    }
+  }
+
+  const stopRecording = async () => {
+    try {
+      await audioRecorder.stop()
+      const uri = audioRecorder.uri
+      if (uri) {
+        setAttachments((prev) => [...prev, { type: "audio", uri, durationMs: recorderState.durationMillis }])
+        Toast.show("Recording saved", { duration: Toast.durations.SHORT })
+      }
+    } catch (e) {
+      Toast.show("Failed to stop recording", { duration: Toast.durations.SHORT })
+    }
+  }
+
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  useEffect(() => {
+    return () => {
+      // Cleanup handled by hooks
+    }
+  }, [])
 
   const showSuccessToast = () => {
     Toast.show("Request submitted successfully", {
@@ -84,8 +170,21 @@ export default function RaiseTicket() {
       })
       return
     }
-    // TODO: Wire to your submit logic / API
+    // Persist to in-memory mock so it shows in Tickets list
+    const newId = Math.max(...MOCK_TICKETS.map((t) => t.id), 100) + 1
+    MOCK_TICKETS.push({
+      id: newId,
+      title: description.slice(0, 24) || "New Ticket",
+      date: new Date().toISOString().slice(0, 10),
+      status: "open",
+      description,
+      machineCode: `${model.replace(/\s+/g, "-")}-${newId}`,
+      model,
+      category,
+      attachments,
+    })
     showSuccessToast()
+    router.replace("/(tabs)/Tickets")
   }
 
   const InlineOptions = ({ data, onSelect }: { data: string[]; onSelect: (v: string) => void }) => (
@@ -103,7 +202,7 @@ export default function RaiseTicket() {
 
   const filteredModels = useMemo(() => {
     const q = modelQuery.trim().toLowerCase()
-    return q ? MACHINE_MODELS.filter((m) => m.toLowerCase().includes(q)) : MACHINE_MODELS
+    return q ? PURCHASED_MODELS.filter((m) => m.toLowerCase().includes(q)) : PURCHASED_MODELS
   }, [modelQuery])
 
   return (
@@ -235,11 +334,54 @@ export default function RaiseTicket() {
               <Ionicons name="camera" size={18} color="#2E86DE" />
               <Text style={styles.actionText}>Upload Attachment</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={handleAudio}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={recorderState.isRecording ? stopRecording : handleAudio}
+            >
               <Ionicons name="mic" size={18} color="#2E86DE" />
-              <Text style={styles.actionText}>Audio Input</Text>
+              <Text style={styles.actionText}>{recorderState.isRecording ? "Stop" : "Audio Input"}</Text>
             </TouchableOpacity>
           </View>
+
+          {showMediaOptions && (
+            <View style={styles.inlineDropdown}>
+              <TouchableOpacity style={styles.inlineOption} onPress={capturePhoto}>
+                <Text style={styles.inlineOptionText}>Take Photo</Text>
+              </TouchableOpacity>
+              <View style={styles.inlineSeparator} />
+              <TouchableOpacity style={styles.inlineOption} onPress={captureVideo}>
+                <Text style={styles.inlineOptionText}>Record Video</Text>
+              </TouchableOpacity>
+              <View style={styles.inlineSeparator} />
+              <TouchableOpacity style={styles.inlineOption} onPress={pickFromLibrary}>
+                <Text style={styles.inlineOptionText}>Choose from Library</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {attachments.length > 0 && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={styles.label}>Preview</Text>
+              <View style={styles.previewGrid}>
+                {attachments.map((a, idx) => (
+                  <View key={`${a.uri}-${idx}`} style={styles.previewItem}>
+                    {a.type === "image" ? (
+                      <Pressable onPress={() => { setViewerMedia({ type: "image", uri: a.uri }); setViewerVisible(true) }}>
+                        <Image source={{ uri: a.uri }} style={styles.previewImage} contentFit="cover" />
+                      </Pressable>
+                    ) : a.type === "video" ? (
+                      <VideoPreview uri={a.uri} onPress={() => { setViewerMedia({ type: "video", uri: a.uri }); setViewerVisible(true) }} />
+                    ) : (
+                      <AudioPlayer uri={a.uri} durationMs={a.durationMs} />
+                    )}
+                    <TouchableOpacity style={styles.removeBadge} onPress={() => removeAttachment(idx)}>
+                      <Ionicons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.submitBtn, (!isModelValid || !category || !description.trim()) && styles.submitBtnDisabled]}
@@ -248,17 +390,18 @@ export default function RaiseTicket() {
           >
             <Text style={styles.submitText}>Submit Request</Text>
           </TouchableOpacity>
+
+          <MediaViewer visible={viewerVisible} media={viewerMedia} onClose={() => setViewerVisible(false)} />
         </View>
       </ScrollView>
     </SafeAreaView>
   )
 }
 
-// styles remain the same
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#E8ECF5" },
   container: { flex: 1 },
-  content: { padding: 18, paddingTop: 60, paddingBottom: 0 },
+  content: { padding: 18, paddingTop: 60, paddingBottom: 85 },
   card: {
     backgroundColor: "#fff",
     borderRadius: 24,
@@ -309,7 +452,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
   },
-  selectText: { color: "#9AA0A6", fontSize: 14},
+  selectText: { color: "#9AA0A6", fontSize: 14 },
   selectTextSelected: { color: "#222", fontSize: 14 },
   row: {
     flexDirection: "row",
@@ -374,7 +517,7 @@ const styles = StyleSheet.create({
     left: -2000,
     right: -2000,
     backgroundColor: "transparent",
-    zIndex: 5, // below selectRaised (30) and suggestionsDropdown (20)
+    zIndex: 5,
   },
   noResultsContainer: {
     paddingHorizontal: 14,
@@ -384,16 +527,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   noResults: { color: "#6b7280", fontStyle: "italic" },
-  fieldContainer: {
-    position: "relative",
-  },
-  fieldContainerRaised: {
-    zIndex: 50,
-    elevation: 8,
-  },
-  fieldContainerBelow: {
-    zIndex: 1,
-  },
+  fieldContainer: { position: "relative" },
+  fieldContainerRaised: { zIndex: 50, elevation: 8 },
+  fieldContainerBelow: { zIndex: 1 },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -405,8 +541,149 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E5E7EB",
   },
   searchInput: { flex: 1, fontSize: 14, color: "#222", padding: 0 },
-  selectRaised: {
-    zIndex: 30,
-    elevation: 12,
+  selectRaised: { zIndex: 30, elevation: 12 },
+  previewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 as unknown as number },
+  previewItem: {
+    width: 120,
+    height: 90,
+    borderRadius: 10,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "#f1f5f9",
   },
+  previewImage: { width: "100%", height: "100%", borderRadius: 10 },
+  previewVideo: { width: "100%", height: "100%", borderRadius: 10, backgroundColor: "#000" },
+  playOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  removeBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  audioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 8,
+    paddingHorizontal: 10,
+    height: "100%",
+  },
+  audioBtn: {
+    backgroundColor: "#1e90ff",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioText: { color: "#222", fontWeight: "600", flexShrink: 1, maxWidth: 80 },
 })
+
+function VideoPreview({ uri, onPress }: { uri: string; onPress: () => void }) {
+  const player = useVideoPlayer(uri, (player) => {
+    player.loop = false
+    player.muted = true
+  })
+
+  return (
+    <Pressable onPress={onPress}>
+      <View style={{ width: "100%", height: "100%" }}>
+        <VideoView
+          player={player}
+          style={styles.previewVideo}
+          nativeControls={false}
+          contentFit="cover"
+        />
+        <View style={styles.playOverlay}>
+          <View style={styles.playCircle}>
+            <Ionicons name="play" size={18} color="#fff" />
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  )
+}
+
+function MediaViewer({ visible, media, onClose }: { visible: boolean; media: { type: "image" | "video"; uri: string } | null; onClose: () => void }) {
+  const videoPlayer = useVideoPlayer(media?.type === "video" ? media.uri : "", (player) => {
+    player.loop = false
+  })
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={viewerStyles.backdrop}>
+        <Pressable style={viewerStyles.backdropFill} onPress={onClose} />
+        <View style={viewerStyles.centered}>
+          <View style={viewerStyles.content}>
+            {media?.type === "image" ? (
+              <Image source={{ uri: media.uri }} style={viewerStyles.image} contentFit="contain" />
+            ) : media?.type === "video" ? (
+              <VideoView player={videoPlayer} style={viewerStyles.video} nativeControls contentFit="contain" />
+            ) : null}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+const viewerStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)' },
+  backdropFill: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { width: '92%', height: '70%', borderRadius: 12, overflow: 'hidden' },
+  image: { width: '100%', height: '100%' },
+  video: { width: '100%', height: '100%', backgroundColor: '#000' },
+})
+
+function AudioPlayer({ uri, durationMs }: { uri: string; durationMs?: number }) {
+  const player = useAudioPlayer(uri)
+
+  const toggle = () => {
+    try {
+      if (player.playing) {
+        player.pause()
+      } else {
+        player.play()
+      }
+    } catch (e) {
+      Toast.show("Audio error", { duration: Toast.durations.SHORT })
+    }
+  }
+
+  const fmt = (ms?: number) => {
+    if (!ms) return ""
+    const s = Math.floor(ms / 1000)
+    const m = Math.floor(s / 60)
+    const r = s % 60
+    return `${m}:${r.toString().padStart(2, "0")}`
+  }
+
+  return (
+    <View style={styles.audioRow}>
+      <TouchableOpacity style={styles.audioBtn} onPress={toggle}>
+        <Ionicons name={player.playing ? "pause" : "play"} size={16} color="#fff" />
+      </TouchableOpacity>
+      <Text style={styles.audioText}>{fmt(durationMs)}</Text>
+    </View>
+  )
+}

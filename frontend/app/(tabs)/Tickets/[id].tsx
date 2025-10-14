@@ -1,7 +1,10 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getTicketById, statusColor, Ticket } from '@/lib/mock/tickets';
+import { Image } from 'expo-image';
+import { useAudioPlayer } from 'expo-audio';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 // Hide this screen from the bottom tab bar
 export const href = null;
@@ -17,7 +20,9 @@ export default function TicketDetails() {
   const params = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const id = Number(params.id);
-  const ticket = Number.isFinite(id) ? getTicketById(id) : undefined;
+  const ticket: Ticket | undefined = Number.isFinite(id) ? getTicketById(id) : undefined;
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerMedia, setViewerMedia] = useState<{ type: 'image' | 'video'; uri: string } | null>(null);
 
   if (!ticket) {
     return (
@@ -57,10 +62,27 @@ export default function TicketDetails() {
             <View style={styles.separator} />
             <Text style={styles.sectionTitle}>Attachments</Text>
             <View style={styles.attachments}>
-              {ticket.attachments.map((a, idx) => (
-                <Image key={idx} source={{ uri: a.uri }} style={styles.attachmentImg} />
-              ))}
+              {ticket.attachments.map((a, idx) => {
+                if (a.type === 'image') {
+                  return (
+                    <Pressable key={idx} onPress={() => { setViewerMedia({ type: 'image', uri: a.uri }); setViewerVisible(true); }}>
+                      <Image source={{ uri: a.uri }} style={styles.attachmentImg} contentFit="cover" />
+                    </Pressable>
+                  );
+                }
+                if (a.type === 'video') {
+                  return (
+                    <VideoThumbnail key={idx} uri={a.uri} onPress={() => { setViewerMedia({ type: 'video', uri: a.uri }); setViewerVisible(true); }} />
+                  );
+                }
+                return (
+                  <View key={idx} style={styles.audioPill}>
+                    <AudioPlayer uri={a.uri} />
+                  </View>
+                );
+              })}
             </View>
+            <MediaViewer visible={viewerVisible} media={viewerMedia} onClose={() => setViewerVisible(false)} />
           </>
         ) : null}
       </View>
@@ -174,6 +196,37 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
   },
+  videoThumb: {
+    width: 120,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  playOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  audioPill: {
+    width: 160,
+    height: 50,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+  },
   primaryBtn: {
     backgroundColor: '#1e90ff',
     borderRadius: 10,
@@ -185,3 +238,80 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+function MediaViewer({ visible, media, onClose }: { visible: boolean; media: { type: 'image' | 'video'; uri: string } | null; onClose: () => void }) {
+  const videoPlayer = useVideoPlayer(media?.type === 'video' ? media.uri : '', player => {
+    player.muted = false;
+  });
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={viewerStyles.backdrop}>
+        <Pressable style={viewerStyles.backdropFill} onPress={onClose} />
+        <View style={viewerStyles.centered}>
+          <View style={viewerStyles.content}>
+            {media?.type === 'image' ? (
+              <Image source={{ uri: media.uri }} style={viewerStyles.image} contentFit="contain" />
+            ) : media?.type === 'video' ? (
+              <VideoView player={videoPlayer} style={viewerStyles.video} nativeControls contentFit="contain" />
+            ) : null}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const viewerStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)' },
+  backdropFill: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { width: '92%', height: '70%', borderRadius: 12, overflow: 'hidden' },
+  image: { width: '100%', height: '100%' },
+  video: { width: '100%', height: '100%', backgroundColor: '#000' },
+});
+
+function VideoThumbnail({ uri, onPress }: { uri: string; onPress: () => void }) {
+  const player = useVideoPlayer(uri, player => {
+    player.muted = true;
+  });
+
+  return (
+    <Pressable onPress={onPress}>
+      <View style={styles.videoThumb}>
+        <VideoView
+          player={player}
+          style={styles.videoThumb}
+          contentFit="cover"
+          nativeControls={false}
+        />
+        <View style={styles.playOverlay}>
+          <View style={styles.playCircle}>
+            <Text style={{ color: '#fff', fontWeight: '800' }}>▶</Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function AudioPlayer({ uri }: { uri: string }) {
+  const player = useAudioPlayer(uri);
+
+  const toggle = () => {
+    if (player.playing) {
+      player.pause();
+    } else {
+      player.play();
+    }
+  };
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 10 }}>
+      <TouchableOpacity onPress={toggle} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#1e90ff', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#fff', fontWeight: '800' }}>{player.playing ? 'II' : '▶'}</Text>
+      </TouchableOpacity>
+      <Text style={{ color: '#222', fontWeight: '600' }} numberOfLines={1} ellipsizeMode="tail">Audio</Text>
+    </View>
+  );
+}

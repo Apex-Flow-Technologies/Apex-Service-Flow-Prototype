@@ -1,6 +1,6 @@
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../../firebaseConfig"; // adjust if needed
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../../firebaseConfig";
+
 
 import React, { useState, useRef } from 'react';
 import {
@@ -27,7 +27,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [form, setForm] = useState({
-    email: '',
+    username: '',
     password: '',
     remember: false,
   });
@@ -38,7 +38,7 @@ export default function Login() {
   const emailScale = useRef(new Animated.Value(1)).current;
   const passScale = useRef(new Animated.Value(1)).current;
 
-  const handleFocus = (animRef: Animated.Value) => {
+  const handleFocus = (animRef: Animated.Value) => { //check here
     Animated.spring(animRef, {
       toValue: 1.03,
       useNativeDriver: true,
@@ -47,7 +47,7 @@ export default function Login() {
     }).start();
   };
 
-  const handleBlur = (animRef: Animated.Value) => {
+  const handleBlur = (animRef: Animated.Value) => {//check here
     Animated.spring(animRef, {
       toValue: 1,
       useNativeDriver: true,
@@ -56,50 +56,52 @@ export default function Login() {
     }).start();
   };
 
-  const handleChange = (key: string, value: string | boolean) => {
+  const handleChange = (key: string, value: string | boolean) => { //check here
     setForm({ ...form, [key]: value });
   };
 
   // UPDATED LOGIN FUNCTION
   const handleLogin = async () => {
-    if (!form.email || !form.password) {
-      Alert.alert("Missing Info", "Please enter both email and password.");
+    if (!form.username || !form.password) {
+      Alert.alert("Missing Info", "Please enter both username and password.");
       return;
     }
 
     setIsLoading(true); // <-- Start loading
 
     try {
-      // signin (auth)
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        form.email,
-        form.password
-      );
+      // Query Firestore for the given username
+      const q = query(collection(db, "user"), where("username", "==", form.username));
+      const querySnapshot = await getDocs(q);
 
-      // Fetch role from Firestore
-      const uid = userCredential.user.uid;
-      const userDoc = await getDoc(doc(db, "user", uid));
-
-      if (!userDoc.exists()) {
-        Alert.alert("Error", "User data not found in Firestore.");
+      if (querySnapshot.empty) {
+        Alert.alert("Login Failed", "No user found with that username.");
+        setIsLoading(false);
         return;
       }
 
-      const { role } = userDoc.data();
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data();
 
-      // Route based on role
+      if (userData.password !== form.password) {
+        Alert.alert("Login Failed", "Incorrect password.");
+        setIsLoading(false);
+        return;
+      }
+
+      // ✅ Login successful
+      const { role } = userData;
+
+      // Redirect based on role (same as before)
       if (role === "manager") router.replace("/(managerTabs)");
       else if (role === "technician") router.replace("/(technicianTabs)");
       else if (role === "user") router.replace("/(tabs)");
       else Alert.alert("Unknown Role", "This account has no valid role assigned.");
 
-    } catch (error: any) {
-      // Only triggered if Auth fails
-      console.log("Login failed:", error.code, error.message);
-      Alert.alert("Login Failed", `${error.code}: ${error.message}`);
-    } finally {
-      setIsLoading(false); // <-- Stop loading, will run on success or failure
+    } catch (error) {
+      console.log("Login failed:", error);
+      Alert.alert("Login Failed", "Something went wrong. Please try again.");
+      setIsLoading(false);
     }
   };
 
@@ -128,12 +130,12 @@ export default function Login() {
           {/* Email Input */}
           <Animated.View style={{ transform: [{ scale: emailScale }], marginBottom: 16 }}>
             <TextInput
-              style={[styles.input, form.email.length > 0 && { borderColor: '#2196F3' }]}
-              placeholder="Email Address"
+              style={[styles.input, form.username.length > 0 && { borderColor: '#2196F3' }]}
+              placeholder="Username"
               placeholderTextColor="#666"
               keyboardType="email-address"
-              value={form.email}
-              onChangeText={v => handleChange('email', v)}
+              value={form.username}
+              onChangeText={v => handleChange('username', v)}
               onFocus={() => handleFocus(emailScale)}
               onBlur={() => handleBlur(emailScale)}
             />

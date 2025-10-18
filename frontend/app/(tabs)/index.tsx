@@ -26,7 +26,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* --- START: MORE COMPACT STATS SECTION --- */}
+          {/* Stats Section */}
           <View style={styles.statsRow}>
             <TouchableOpacity style={[styles.statCard, styles.statCardOpen]}>
               <Ionicons name="folder-open-outline" size={20} color="#FFA000" />
@@ -44,12 +44,17 @@ export default function HomeScreen() {
               <Text style={styles.statLabel}>Completed</Text>
             </TouchableOpacity>
           </View>
-          {/* --- END: MORE COMPACT STATS SECTION --- */}
         </View>
 
         {/* Tickets Container */}
         <View style={styles.ticketsContainer}>
-          <Text style={styles.sectionTitle}>Recent Tickets</Text>
+          {/* Section header with "All Tickets" button */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Tickets</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/Tickets')}>
+              <Text style={styles.viewAllText}>All Tickets →</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.ticketCard}>
             <View style={styles.ticketCardHeader}>
@@ -113,7 +118,6 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 18,
   },
-  // --- START: ADJUSTED STYLES FOR STATS ---
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -122,7 +126,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     borderRadius: 16,
-    paddingVertical: 10, // Reduced from 12
+    paddingVertical: 10,
     marginHorizontal: 4,
     alignItems: 'center',
     shadowColor: '#000',
@@ -141,18 +145,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
   },
   statNumber: {
-    fontSize: 18, // Reduced from 20
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#212121',
-    marginTop: 5, // Reduced from 6
+    marginTop: 5,
   },
   statLabel: {
-    fontSize: 10, // Reduced from 11
+    fontSize: 10,
     color: '#616161',
-    marginTop: 2, // Reduced from 3
+    marginTop: 2,
     fontWeight: '600',
   },
-  // --- END: ADJUSTED STYLES ---
   ticketsContainer: {
     backgroundColor: '#fff',
     borderRadius: 24,
@@ -164,6 +167,23 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 18,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  viewAllText: {
+  backgroundColor: '#2E86DE',
+  color: '#fff',
+  fontWeight: '600',
+  fontSize: 13,
+  paddingVertical: 6,
+  paddingHorizontal: 12,
+  borderRadius: 20,
+  overflow: 'hidden',
+  },
+
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -200,7 +220,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontWeight: '700',
     fontSize: 16,
-    marginBottom: 14,
     color: '#222',
   },
   ticketCard: {
@@ -262,7 +281,7 @@ const styles = StyleSheet.create({
   },
   raiseTicketText: {
     color: '#fff',
-    fontWeight: '700',
+    fontWeight: '700',  
     fontSize: 16,
     marginLeft: 8,
   },

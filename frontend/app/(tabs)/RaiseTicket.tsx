@@ -2,7 +2,7 @@
 
 // @ts-nocheck
 
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   View,
   Text,
@@ -25,17 +25,13 @@ import { VideoView, useVideoPlayer } from "expo-video"
 import { Image } from "expo-image"
 import { tickets as MOCK_TICKETS } from "@/lib/mock/tickets"
 
-// TODO(backend): Replace PURCHASED_MODELS with Firebase-driven list for the signed-in user.
-// Suggested: store user's purchased models in Firestore under users/{uid}/purchases or a field,
-// and fetch here via a hook/context to populate the dropdown and validation.
-const PURCHASED_MODELS = [
-  "Apex 100",
-  "Apex Pro",
-  "Apex Ultra",
-]
-const CATEGORIES = ["Mechanical", "Electrical", "Software", "Other"]
+// FIRESTORE
+import { db, auth } from "../../firebaseConfig" // make sure you export auth & db from your firebase setup
+import { collection, getDocs, query, where } from "firebase/firestore"
 
-const OPTION_ROW_HEIGHT = 48 // fixed visible rows to 4 and consistent item layout for better scrolling
+// Categories
+const CATEGORIES = ["Mechanical", "Electrical", "Software", "Other"]
+const OPTION_ROW_HEIGHT = 48
 const { height: WINDOW_HEIGHT } = Dimensions.get("window")
 const DROPDOWN_MAX_HEIGHT = Math.min(OPTION_ROW_HEIGHT * 3, Math.floor(WINDOW_HEIGHT * 0.5))
 
@@ -56,8 +52,35 @@ export default function RaiseTicket() {
   const [viewerVisible, setViewerVisible] = useState(false)
   const [viewerMedia, setViewerMedia] = useState<{ type: "image" | "video"; uri: string } | null>(null)
 
-  // Model is valid only when user selects one of the purchased options
-  const isModelValid = !!model && PURCHASED_MODELS.includes(model) && modelQuery === model
+  // Firestore machines
+  const [machinesList, setMachinesList] = useState<{ id: string; type: string }[]>([])
+  const [loadingMachines, setLoadingMachines] = useState(true)
+
+  useEffect(() => {
+    const fetchMachines = async () => {
+      try {
+        const uid = auth.currentUser?.uid
+        if (!uid) return
+        const q = query(collection(db, "machines"), where("assignedTo", "==", uid))
+        const snapshot = await getDocs(q)
+        const machines: { id: string; type: string }[] = []
+        snapshot.forEach((doc) => {
+          const data = doc.data()
+          machines.push({ id: doc.id, type: data.type })
+        })
+        setMachinesList(machines)
+      } catch (err) {
+        console.log("Error fetching machines:", err)
+        Toast.show("Failed to fetch machines")
+      } finally {
+        setLoadingMachines(false)
+      }
+    }
+    fetchMachines()
+  }, [])
+
+  // Model is valid only if it exists in fetched machines and query matches
+  const isModelValid = !!model && machinesList.some((m) => m.type === model) && modelQuery === model
 
   const handleUpload = () => {
     setShowMediaOptions((v) => !v)
@@ -138,12 +161,6 @@ export default function RaiseTicket() {
     setAttachments((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  useEffect(() => {
-    return () => {
-      // Cleanup handled by hooks
-    }
-  }, [])
-
   const showSuccessToast = () => {
     Toast.show("Request submitted successfully", {
       duration: Toast.durations.SHORT,
@@ -170,7 +187,7 @@ export default function RaiseTicket() {
       })
       return
     }
-    // Persist to in-memory mock so it shows in Tickets list
+
     const newId = Math.max(...MOCK_TICKETS.map((t) => t.id), 100) + 1
     MOCK_TICKETS.push({
       id: newId,
@@ -202,8 +219,8 @@ export default function RaiseTicket() {
 
   const filteredModels = useMemo(() => {
     const q = modelQuery.trim().toLowerCase()
-    return q ? PURCHASED_MODELS.filter((m) => m.toLowerCase().includes(q)) : PURCHASED_MODELS
-  }, [modelQuery])
+    return q ? machinesList.filter((m) => m.type.toLowerCase().includes(q)) : machinesList
+  }, [modelQuery, machinesList])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -225,13 +242,13 @@ export default function RaiseTicket() {
                 styles.select,
                 { gap: 8 },
                 !isModelFocused && modelQuery.length > 0 && !isModelValid && styles.selectInvalid,
-                showModelSuggestions && styles.selectRaised, // ensure input stays clickable
+                showModelSuggestions && styles.selectRaised,
               ]}
             >
               <Ionicons name="search" size={16} color="#9AA0A6" />
               <TextInput
                 style={{ flex: 1, padding: 0, color: modelQuery ? "#222" : "#9AA0A6" }}
-                placeholder="Search Model..."
+                placeholder={loadingMachines ? "Loading machines..." : "Search Model..."}
                 placeholderTextColor="#9AA0A6"
                 value={modelQuery}
                 onChangeText={(txt) => {
@@ -251,6 +268,7 @@ export default function RaiseTicket() {
                 blurOnSubmit={false}
               />
             </View>
+
             {showModelSuggestions && (
               <View style={styles.suggestionsDropdown}>
                 {filteredModels.length > 0 ? (
@@ -262,18 +280,18 @@ export default function RaiseTicket() {
                     style={{ maxHeight: DROPDOWN_MAX_HEIGHT }}
                     contentContainerStyle={{ paddingVertical: 2 }}
                   >
-                    {filteredModels.map((item) => (
-                      <View key={item}>
+                    {filteredModels.map((m) => (
+                      <View key={m.id}>
                         <TouchableOpacity
                           style={[styles.inlineOption, { minHeight: OPTION_ROW_HEIGHT }]}
                           onPress={() => {
-                            setModel(item)
-                            setModelQuery(item)
+                            setModel(m.type)
+                            setModelQuery(m.type)
                             setShowModelSuggestions(false)
                             Keyboard.dismiss()
                           }}
                         >
-                          <Text style={styles.inlineOptionText}>{item}</Text>
+                          <Text style={styles.inlineOptionText}>{m.type}</Text>
                         </TouchableOpacity>
                         <View style={styles.inlineSeparator} />
                       </View>
@@ -287,6 +305,7 @@ export default function RaiseTicket() {
                 )}
               </View>
             )}
+
             {!isModelFocused && modelQuery.length > 0 && !isModelValid && (
               <Text style={styles.invalidHint}>Select the option for valid input</Text>
             )}
@@ -397,6 +416,7 @@ export default function RaiseTicket() {
     </SafeAreaView>
   )
 }
+
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#E8ECF5" },

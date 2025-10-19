@@ -1,5 +1,7 @@
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 
 import React, { useState, useRef } from 'react';
@@ -90,13 +92,16 @@ export default function Login() {
       }
 
       // ✅ Login successful
+      await AsyncStorage.setItem("currentUser", JSON.stringify({ id: userDoc.id, ...userData }));
+
       const { role } = userData;
 
-      // Redirect based on role (same as before)
+// Redirect based on role
       if (role === "manager") router.replace("/(managerTabs)");
       else if (role === "technician") router.replace("/(technicianTabs)");
       else if (role === "user") router.replace("/(tabs)");
       else Alert.alert("Unknown Role", "This account has no valid role assigned.");
+
 
     } catch (error) {
       console.log("Login failed:", error);

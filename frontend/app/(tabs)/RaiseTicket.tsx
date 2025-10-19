@@ -3,6 +3,8 @@
 // @ts-nocheck
 
 import { useState, useMemo, useEffect } from "react"
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import {
   View,
   Text,
@@ -57,27 +59,34 @@ export default function RaiseTicket() {
   const [loadingMachines, setLoadingMachines] = useState(true)
 
   useEffect(() => {
-    const fetchMachines = async () => {
-      try {
-        const uid = auth.currentUser?.uid
-        if (!uid) return
-        const q = query(collection(db, "machines"), where("assignedTo", "==", uid))
-        const snapshot = await getDocs(q)
-        const machines: { id: string; type: string }[] = []
-        snapshot.forEach((doc) => {
-          const data = doc.data()
-          machines.push({ id: doc.id, type: data.type })
-        })
-        setMachinesList(machines)
-      } catch (err) {
-        console.log("Error fetching machines:", err)
-        Toast.show("Failed to fetch machines")
-      } finally {
-        setLoadingMachines(false)
-      }
+  const fetchMachines = async () => {
+    try {
+      const currentUserStr = await AsyncStorage.getItem("currentUser");
+      if (!currentUserStr) return;
+
+      const user = JSON.parse(currentUserStr); // user.id should exist
+      const q = query(collection(db, "machines"), where("assignedTo", "==", user.id));
+
+      const snapshot = await getDocs(q); // <-- you need this
+      const machines: { id: string; type: string }[] = [];
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        machines.push({ id: doc.id, type: data.type });
+      });
+
+      setMachinesList(machines);
+    } catch (err) {
+      console.log("Error fetching machines:", err);
+      Toast.show("Failed to fetch machines");
+    } finally {
+      setLoadingMachines(false);
     }
-    fetchMachines()
-  }, [])
+  };
+
+  fetchMachines();
+}, []);
+
 
   // Model is valid only if it exists in fetched machines and query matches
   const isModelValid = !!model && machinesList.some((m) => m.type === model) && modelQuery === model

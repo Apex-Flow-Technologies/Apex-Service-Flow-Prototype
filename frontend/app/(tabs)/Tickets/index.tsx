@@ -1,13 +1,30 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { tickets as MOCK_TICKETS, statusColor, Ticket } from '@/lib/mock/tickets';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from '../../../firebaseConfig';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native';
 
 const TABS: { label: string; value: 'completed' | 'onprogress' }[] = [
   { label: 'Completed', value: 'completed' },
   { label: 'On Progress', value: 'onprogress' },
 ];
+
+// Status color mapping
+const statusColor: Record<string, string> = {
+  open: '#4CAF50',
+  'in progress': '#2196F3',
+  closed: '#9E9E9E',
+};
+
+interface Ticket {
+  id: string;
+  title: string;
+  date: string;
+  status: 'open' | 'in progress' | 'closed';
+}
 
 function StatusBadge({ status }: { status: Ticket['status'] }) {
   const color = statusColor[status] || '#aaa';
@@ -18,7 +35,7 @@ function StatusBadge({ status }: { status: Ticket['status'] }) {
   );
 }
 
-function TicketCard({ ticket, onView }: { ticket: Ticket; onView: (id: number) => void }) {
+function TicketCard({ ticket, onView }: { ticket: Ticket; onView: (id: string) => void }) {
   return (
     <View style={styles.card}>
       <View style={styles.cardLeft}>
@@ -40,12 +57,90 @@ function TicketCard({ ticket, onView }: { ticket: Ticket; onView: (id: number) =
 
 export default function Tickets() {
   const [activeTab, setActiveTab] = useState<'completed' | 'onprogress'>('onprogress');
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const filteredTickets = useMemo(() => {
-    // Map tickets to tabs: closed => completed, others => onprogress
-    return MOCK_TICKETS.filter(t => (t.status === 'closed' ? 'completed' : 'onprogress') === activeTab);
-  }, [activeTab]);
   const insets = useSafeAreaInsets();
+
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const userStr = await AsyncStorage.getItem('currentUser');
+      if (!userStr) {
+        console.log('No user found');
+        setTickets([]);
+        return;
+      }
+
+      const user = JSON.parse(userStr);
+
+      const q = query(
+        collection(db, 'tickets'),
+        where('userId', '==', user.id)
+      );
+
+      const snapshot = await getDocs(q);
+      const userTickets: Ticket[] = [];
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        let formattedDate = 'N/A';
+        if (data.createdAt) {
+          try {
+            const timestamp = data.createdAt.toDate();
+            formattedDate = timestamp.toISOString().split('T')[0];
+          } catch (e) {
+            console.error('Error formatting date:', e);
+          }
+        }
+
+        userTickets.push({
+          id: doc.id,
+          title: data.description?.substring(0, 50) || 'Service Request',
+          date: formattedDate,
+          status: data.status || 'open',
+        });
+      });
+
+      userTickets.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateB - dateA;
+      });
+
+      setTickets(userTickets);
+    } catch (err) {
+      console.error('Error fetching tickets:', err);
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchTickets();
+    }, [])
+  );
+
+  const filteredTickets = useMemo(() => {
+    return tickets.filter(t => 
+      (t.status === 'closed' ? 'completed' : 'onprogress') === activeTab
+    );
+  }, [activeTab, tickets]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + 40, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#1e90ff" />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 40 }]}>
@@ -66,9 +161,7 @@ export default function Tickets() {
           <TicketCard
             key={ticket.id}
             ticket={ticket}
-            onView={(id) =>
-              router.push({ pathname: '/(tabs)/Tickets/[id]' as const, params: { id: String(id) } })
-            }
+            onView={(id) => router.push(`/(tabs)/Tickets/${id}`)}
           />
         ))}
       </ScrollView>

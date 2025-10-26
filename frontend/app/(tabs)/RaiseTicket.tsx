@@ -5,6 +5,7 @@
 import { useState, useMemo, useEffect } from "react"
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
 import {
   View,
   Text,
@@ -29,7 +30,8 @@ import { tickets as MOCK_TICKETS } from "@/lib/mock/tickets"
 
 // FIRESTORE
 import { db, auth } from "../../firebaseConfig" // make sure you export auth & db from your firebase setup
-import { collection, getDocs, query, where } from "firebase/firestore"
+import { collection, getDocs, query, where, addDoc, serverTimestamp } from "firebase/firestore"
+
 
 // Categories
 const CATEGORIES = ["Mechanical", "Electrical", "Software", "Other"]
@@ -180,38 +182,59 @@ export default function RaiseTicket() {
     })
   }
 
-  const handleSubmit = () => {
-    const errors: string[] = []
-    if (!isModelValid) errors.push("Machine Model: Select an option from the list.")
-    if (!category) errors.push("Category: Please select a category.")
-    if (!description.trim()) errors.push("Description: Please enter a description.")
+const handleSubmit = async () => {
+  const errors: string[] = []
+  if (!isModelValid) errors.push("Machine Model: Select an option from the list.")
+  if (!category) errors.push("Category: Please select a category.")
+  if (!description.trim()) errors.push("Description: Please enter a description.")
 
-    if (errors.length) {
-      Toast.show(errors.join("\n"), {
-        duration: Toast.durations.SHORT,
-        position: Toast.positions.BOTTOM,
-        backgroundColor: "#e67e22",
-        textColor: "#fff",
-        containerStyle: { marginBottom: 60 },
-      })
-      return
+  if (errors.length) {
+    Toast.show(errors.join("\n"), {
+      duration: Toast.durations.SHORT,
+      position: Toast.positions.BOTTOM,
+      backgroundColor: "#e67e22",
+      textColor: "#fff",
+      containerStyle: { marginBottom: 60 },
+    })
+    return
+  }
+
+  try {
+    const currentUserStr = await AsyncStorage.getItem("currentUser");
+    if (!currentUserStr) throw new Error("User not found")
+
+    const user = JSON.parse(currentUserStr);
+
+    // Prepare ticket object
+    const newTicket = {
+      userId: user.id,
+      userName: user.name,
+      model,
+      machineCode: `${model.replace(/\s+/g, "-")}-${Date.now()}`, // unique machine code
+      category,
+      description,
+      attachments, // keeps image/video/audio as array of {type, uri, durationMs?}
+      status: "open",
+      createdAt: serverTimestamp(),
     }
 
-    const newId = Math.max(...MOCK_TICKETS.map((t) => t.id), 100) + 1
-    MOCK_TICKETS.push({
-      id: newId,
-      title: description.slice(0, 24) || "New Ticket",
-      date: new Date().toISOString().slice(0, 10),
-      status: "open",
-      description,
-      machineCode: `${model.replace(/\s+/g, "-")}-${newId}`,
-      model,
-      category,
-      attachments,
-    })
+    // Save to Firestore
+    await addDoc(collection(db, "tickets"), newTicket)
+
     showSuccessToast()
-    router.replace("/(tabs)/Tickets")
+    setModel("")
+    setModelQuery("")
+    setCategory("")
+    setDescription("")
+    setAttachments([])
+
+    router.replace("/(tabs)/Tickets") // navigate to Tickets page (optional)
+  } catch (err) {
+    console.log("Error submitting ticket:", err)
+    Toast.show("Failed to submit ticket", { duration: Toast.durations.SHORT })
   }
+}
+
 
   const InlineOptions = ({ data, onSelect }: { data: string[]; onSelect: (v: string) => void }) => (
     <View style={styles.inlineDropdown}>

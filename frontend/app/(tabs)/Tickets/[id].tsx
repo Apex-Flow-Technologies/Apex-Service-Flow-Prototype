@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getTicketById, statusColor, Ticket } from '@/lib/mock/tickets';
 import { Image } from 'expo-image';
 import { useAudioPlayer } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { db } from '../../../firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Hide this screen from the bottom tab bar
 export const href = null;
@@ -16,13 +17,100 @@ export const unstable_settings = {
   animationTypeForReplace: 'push',
 };
 
+// Status color mapping
+const statusColor: Record<string, string> = {
+  open: '#4CAF50',
+  'in progress': '#2196F3',
+  closed: '#9E9E9E',
+};
+
+interface Attachment {
+  type: 'image' | 'video' | 'audio';
+  uri: string;
+  durationMs?: number;
+}
+
+interface Ticket {
+  id: number | string;
+  title?: string;
+  date: string;
+  machineCode: string;
+  model: string;
+  category: string;
+  description: string;
+  status: 'open' | 'in progress' | 'closed';
+  attachments?: Attachment[];
+}
+
 export default function TicketDetails() {
   const params = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
-  const id = Number(params.id);
-  const ticket: Ticket | undefined = Number.isFinite(id) ? getTicketById(id) : undefined;
+  const ticketId = params.id;
+  
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [loading, setLoading] = useState(true);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerMedia, setViewerMedia] = useState<{ type: 'image' | 'video'; uri: string } | null>(null);
+
+  useEffect(() => {
+    const fetchTicket = async () => {
+      if (!ticketId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const ticketRef = doc(db, 'tickets', ticketId);
+        const ticketSnap = await getDoc(ticketRef);
+
+        if (ticketSnap.exists()) {
+          const data = ticketSnap.data();
+          
+          // Format the date
+          let formattedDate = 'N/A';
+          if (data.createdAt) {
+            try {
+              const timestamp = data.createdAt.toDate();
+              formattedDate = timestamp.toISOString().split('T')[0];
+            } catch (e) {
+              console.error('Error formatting date:', e);
+            }
+          }
+
+          setTicket({
+            id: ticketSnap.id,
+            title: data.description?.substring(0, 50) || 'Service Request',
+            date: formattedDate,
+            machineCode: data.machineCode || 'N/A',
+            model: data.model || 'N/A',
+            category: data.category || 'N/A',
+            description: data.description || 'No description provided',
+            status: data.status || 'open',
+            attachments: data.attachments || [],
+          });
+        } else {
+          setTicket(null);
+        }
+      } catch (err) {
+        console.error('Error fetching ticket:', err);
+        setTicket(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTicket();
+  }, [ticketId]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#1e90ff" />
+        <Text style={{ fontSize: 14, color: '#666', marginTop: 12 }}>Loading ticket...</Text>
+      </View>
+    );
+  }
 
   if (!ticket) {
     return (
@@ -41,7 +129,7 @@ export default function TicketDetails() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backBtnText}>{'< Back'}</Text>
         </TouchableOpacity>
-        <Text style={styles.header}>Ticket #{ticket.id}</Text>
+        <Text style={styles.header}>Ticket #{typeof ticket.id === 'string' ? ticket.id.substring(0, 8) : ticket.id}</Text>
       </View>
 
       <View style={styles.card}>

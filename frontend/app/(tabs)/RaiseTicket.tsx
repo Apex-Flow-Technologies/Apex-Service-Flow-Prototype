@@ -1,10 +1,10 @@
+// RaiseTicket.tsx
 "use client"
 
 // @ts-nocheck
 
 import { useState, useMemo, useEffect } from "react"
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 
 import {
   View,
@@ -26,72 +26,87 @@ import * as ImagePicker from "expo-image-picker"
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, RecordingPresets } from "expo-audio"
 import { VideoView, useVideoPlayer } from "expo-video"
 import { Image } from "expo-image"
-import { tickets as MOCK_TICKETS } from "@/lib/mock/tickets"
 
 // FIRESTORE
-import { db, auth } from "../../firebaseConfig" // make sure you export auth & db from your firebase setup
-import { collection, getDocs, query, where, addDoc, serverTimestamp } from "firebase/firestore"
+import { db, auth } from "../../firebaseConfig"
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  serverTimestamp,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  increment,
+} from "firebase/firestore"
 
-
-// Categories
-const CATEGORIES = ["Mechanical", "Electrical", "Software", "Other"]
 const OPTION_ROW_HEIGHT = 48
 const { height: WINDOW_HEIGHT } = Dimensions.get("window")
 const DROPDOWN_MAX_HEIGHT = Math.min(OPTION_ROW_HEIGHT * 3, Math.floor(WINDOW_HEIGHT * 0.5))
 
 export default function RaiseTicket() {
-  const [model, setModel] = useState("")
-  const [modelQuery, setModelQuery] = useState("")
-  const [showModelSuggestions, setShowModelSuggestions] = useState(false)
-  const [category, setCategory] = useState("")
-  const [description, setDescription] = useState("")
-  const [categoryOpen, setCategoryOpen] = useState(false)
-  const [isModelFocused, setIsModelFocused] = useState(false)
   const router = useRouter()
 
+  // Machine selection (machineCode from firestore)
+  const [selectedMachine, setSelectedMachine] = useState("") // e.g. "(2-07-08 | DUST COLLECTOR)"
+  const [machineQuery, setMachineQuery] = useState("")
+  const [showMachineSuggestions, setShowMachineSuggestions] = useState(false)
+
+  // Description and attachments
+  const [description, setDescription] = useState("")
   const [attachments, setAttachments] = useState<Array<{ type: "image" | "video" | "audio"; uri: string; durationMs?: number }>>([])
   const [showMediaOptions, setShowMediaOptions] = useState(false)
+
+  // Audio recorder/player
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
   const recorderState = useAudioRecorderState(audioRecorder)
+
+  // Viewer
   const [viewerVisible, setViewerVisible] = useState(false)
   const [viewerMedia, setViewerMedia] = useState<{ type: "image" | "video"; uri: string } | null>(null)
 
   // Firestore machines
-  const [machinesList, setMachinesList] = useState<{ id: string; type: string }[]>([])
+  const [machinesList, setMachinesList] = useState<{ id: string; machineCode: string }[]>([])
   const [loadingMachines, setLoadingMachines] = useState(true)
 
   useEffect(() => {
-  const fetchMachines = async () => {
-    try {
-      const currentUserStr = await AsyncStorage.getItem("currentUser");
-      if (!currentUserStr) return;
+    const fetchMachines = async () => {
+      try {
+        const currentUserStr = await AsyncStorage.getItem("currentUser");
+        if (!currentUserStr) return;
 
-      const user = JSON.parse(currentUserStr); // user.id should exist
-      const q = query(collection(db, "machines"), where("assignedTo", "==", user.id));
+        const user = JSON.parse(currentUserStr); // user.id should exist
+        const q = query(collection(db, "machines"), where("assignedTo", "==", user.id));
 
-      const snapshot = await getDocs(q); // <-- you need this
-      const machines: { id: string; type: string }[] = [];
+        const snapshot = await getDocs(q);
+        const machines: { id: string; machineCode: string }[] = [];
 
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        machines.push({ id: doc.id, type: data.type });
-      });
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          machines.push({ id: docSnap.id, machineCode: data.machineCode || "" });
+        });
 
-      setMachinesList(machines);
-    } catch (err) {
-      console.log("Error fetching machines:", err);
-      Toast.show("Failed to fetch machines");
-    } finally {
-      setLoadingMachines(false);
-    }
-  };
+        setMachinesList(machines);
+      } catch (err) {
+        console.log("Error fetching machines:", err);
+        Toast.show("Failed to fetch machines");
+      } finally {
+        setLoadingMachines(false);
+      }
+    };
 
-  fetchMachines();
-}, []);
+    fetchMachines();
+  }, []);
 
+  const filteredMachines = useMemo(() => {
+    const q = (machineQuery || "").trim().toLowerCase()
+    return q ? machinesList.filter((m) => (m.machineCode || "").toLowerCase().includes(q)) : machinesList
+  }, [machineQuery, machinesList])
 
-  // Model is valid only if it exists in fetched machines and query matches
-  const isModelValid = !!model && machinesList.some((m) => m.type === model) && modelQuery === model
+  const isMachineValid = !!selectedMachine && machinesList.some((m) => m.machineCode === selectedMachine) && machineQuery === selectedMachine
 
   const handleUpload = () => {
     setShowMediaOptions((v) => !v)
@@ -182,77 +197,70 @@ export default function RaiseTicket() {
     })
   }
 
-const handleSubmit = async () => {
-  const errors: string[] = []
-  if (!isModelValid) errors.push("Machine Model: Select an option from the list.")
-  if (!category) errors.push("Category: Please select a category.")
-  if (!description.trim()) errors.push("Description: Please enter a description.")
+  const handleSubmit = async () => {
+    const errors: string[] = []
+    if (!isMachineValid) errors.push("Machine: Please select a valid machine from the list.")
+    if (!description.trim()) errors.push("Description: Please enter a description.")
 
-  if (errors.length) {
-    Toast.show(errors.join("\n"), {
-      duration: Toast.durations.SHORT,
-      position: Toast.positions.BOTTOM,
-      backgroundColor: "#e67e22",
-      textColor: "#fff",
-      containerStyle: { marginBottom: 60 },
-    })
-    return
-  }
-
-  try {
-    const currentUserStr = await AsyncStorage.getItem("currentUser");
-    if (!currentUserStr) throw new Error("User not found")
-
-    const user = JSON.parse(currentUserStr);
-
-    // Prepare ticket object
-    const newTicket = {
-      userId: user.id,
-      userName: user.name,
-      model,
-      machineCode: `${model.replace(/\s+/g, "-")}-${Date.now()}`, // unique machine code
-      category,
-      description,
-      attachments, // keeps image/video/audio as array of {type, uri, durationMs?}
-      status: "open",
-      createdAt: serverTimestamp(),
+    if (errors.length) {
+      Toast.show(errors.join("\n"), {
+        duration: Toast.durations.SHORT,
+        position: Toast.positions.BOTTOM,
+        backgroundColor: "#e67e22",
+        textColor: "#fff",
+        containerStyle: { marginBottom: 60 },
+      })
+      return
     }
 
-    // Save to Firestore
-    await addDoc(collection(db, "tickets"), newTicket)
+    try {
+      const currentUserStr = await AsyncStorage.getItem("currentUser")
+      if (!currentUserStr) throw new Error("User not found")
 
-    showSuccessToast()
-    setModel("")
-    setModelQuery("")
-    setCategory("")
-    setDescription("")
-    setAttachments([])
+      const user = JSON.parse(currentUserStr)
 
-    router.replace("/(tabs)/Tickets") // navigate to Tickets page (optional)
-  } catch (err) {
-    console.log("Error submitting ticket:", err)
-    Toast.show("Failed to submit ticket", { duration: Toast.durations.SHORT })
+      // Ensure metadata counter exists
+      const counterRef = doc(db, "metadata", "ticketCounter")
+      const counterSnap = await getDoc(counterRef)
+      if (!counterSnap.exists()) {
+        await setDoc(counterRef, { lastTicketNumber: 0 })
+      }
+
+      // Atomic increment
+      await updateDoc(counterRef, { lastTicketNumber: increment(1) })
+
+      // Read updated counter
+      const updatedSnap = await getDoc(counterRef)
+      const nextNumber = updatedSnap.data()?.lastTicketNumber || 0 // numeric
+
+      // Prepare ticket object
+      const newTicket = {
+        userId: user.id,
+        userName: user.name,
+        machineCode: selectedMachine,
+        ticketId: nextNumber, // number stored in Firestore
+        description,
+        attachments,
+        status: "open",
+        createdAt: serverTimestamp(),
+      }
+
+      // Save to Firestore
+      await addDoc(collection(db, "tickets"), newTicket)
+
+      showSuccessToast()
+      // Reset fields
+      setSelectedMachine("")
+      setMachineQuery("")
+      setDescription("")
+      setAttachments([])
+
+      router.replace("/(tabs)/Tickets") // navigate to Tickets page (optional)
+    } catch (err) {
+      console.log("Error submitting ticket:", err)
+      Toast.show("Failed to submit ticket", { duration: Toast.durations.SHORT })
+    }
   }
-}
-
-
-  const InlineOptions = ({ data, onSelect }: { data: string[]; onSelect: (v: string) => void }) => (
-    <View style={styles.inlineDropdown}>
-      {data.map((item, idx) => (
-        <View key={item}>
-          <TouchableOpacity style={styles.inlineOption} onPress={() => onSelect(item)}>
-            <Text style={styles.inlineOptionText}>{item}</Text>
-          </TouchableOpacity>
-          {idx < data.length - 1 && <View style={styles.inlineSeparator} />}
-        </View>
-      ))}
-    </View>
-  )
-
-  const filteredModels = useMemo(() => {
-    const q = modelQuery.trim().toLowerCase()
-    return q ? machinesList.filter((m) => m.type.toLowerCase().includes(q)) : machinesList
-  }, [modelQuery, machinesList])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -260,7 +268,7 @@ const handleSubmit = async () => {
         style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="always"
-        scrollEnabled={!showModelSuggestions}
+        scrollEnabled={!showMachineSuggestions}
         nestedScrollEnabled
       >
         <View style={styles.card}>
@@ -268,32 +276,30 @@ const handleSubmit = async () => {
           <Text style={styles.helper}>Provide details about your issue to help us resolve it faster.</Text>
 
           <Text style={styles.label}>Machine Model</Text>
-          <View style={[styles.fieldContainer, showModelSuggestions && styles.fieldContainerRaised]}>
+          <View style={[styles.fieldContainer, showMachineSuggestions && styles.fieldContainerRaised]}>
             <View
               style={[
                 styles.select,
                 { gap: 8 },
-                !isModelFocused && modelQuery.length > 0 && !isModelValid && styles.selectInvalid,
-                showModelSuggestions && styles.selectRaised,
+                !isMachineValid && machineQuery.length > 0 && styles.selectInvalid,
+                showMachineSuggestions && styles.selectRaised,
               ]}
             >
               <Ionicons name="search" size={16} color="#9AA0A6" />
               <TextInput
-                style={{ flex: 1, padding: 0, color: modelQuery ? "#222" : "#9AA0A6" }}
-                placeholder={loadingMachines ? "Loading machines..." : "Search Model..."}
+                style={{ flex: 1, padding: 0, color: machineQuery ? "#222" : "#9AA0A6" }}
+                placeholder={loadingMachines ? "Loading machines..." : "Machine Code..."}
                 placeholderTextColor="#9AA0A6"
-                value={modelQuery}
+                value={machineQuery}
                 onChangeText={(txt) => {
-                  setModelQuery(txt)
-                  setShowModelSuggestions(true)
-                  if (txt !== model) setModel("")
+                  setMachineQuery(txt)
+                  setShowMachineSuggestions(true)
+                  if (txt !== selectedMachine) setSelectedMachine("")
                 }}
                 onFocus={() => {
-                  setShowModelSuggestions(true)
-                  setCategoryOpen(false)
-                  setIsModelFocused(true)
+                  setShowMachineSuggestions(true)
                 }}
-                onBlur={() => setIsModelFocused(false)}
+                onBlur={() => {}}
                 autoCorrect={false}
                 autoCapitalize="none"
                 returnKeyType="done"
@@ -301,9 +307,9 @@ const handleSubmit = async () => {
               />
             </View>
 
-            {showModelSuggestions && (
+            {showMachineSuggestions && (
               <View style={styles.suggestionsDropdown}>
-                {filteredModels.length > 0 ? (
+                {filteredMachines.length > 0 ? (
                   <ScrollView
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
@@ -312,18 +318,18 @@ const handleSubmit = async () => {
                     style={{ maxHeight: DROPDOWN_MAX_HEIGHT }}
                     contentContainerStyle={{ paddingVertical: 2 }}
                   >
-                    {filteredModels.map((m) => (
+                    {filteredMachines.map((m) => (
                       <View key={m.id}>
                         <TouchableOpacity
                           style={[styles.inlineOption, { minHeight: OPTION_ROW_HEIGHT }]}
                           onPress={() => {
-                            setModel(m.type)
-                            setModelQuery(m.type)
-                            setShowModelSuggestions(false)
+                            setSelectedMachine(m.machineCode)
+                            setMachineQuery(m.machineCode)
+                            setShowMachineSuggestions(false)
                             Keyboard.dismiss()
                           }}
                         >
-                          <Text style={styles.inlineOptionText}>{m.type}</Text>
+                          <Text style={styles.inlineOptionText}>{m.machineCode}</Text>
                         </TouchableOpacity>
                         <View style={styles.inlineSeparator} />
                       </View>
@@ -338,36 +344,15 @@ const handleSubmit = async () => {
               </View>
             )}
 
-            {!isModelFocused && modelQuery.length > 0 && !isModelValid && (
-              <Text style={styles.invalidHint}>Select the option for valid input</Text>
+            {!showMachineSuggestions && machineQuery.length > 0 && !isMachineValid && (
+              <Text style={styles.invalidHint}>Select a valid machine from the list</Text>
             )}
           </View>
 
-          <View style={[styles.fieldContainer, styles.fieldContainerBelow]}>
-            <Text style={styles.label}>Category</Text>
-            <TouchableOpacity
-              style={styles.select}
-              onPress={() => {
-                setCategoryOpen((v) => !v)
-                setShowModelSuggestions(false)
-                Keyboard.dismiss()
-              }}
-            >
-              <Text style={category ? styles.selectTextSelected : styles.selectText}>
-                {category || "Select Category..."}
-              </Text>
-              <Ionicons name="chevron-down" size={18} color="#9AA0A6" />
-            </TouchableOpacity>
-            {categoryOpen && (
-              <InlineOptions
-                data={CATEGORIES}
-                onSelect={(val) => {
-                  setCategory(val)
-                  setCategoryOpen(false)
-                }}
-              />
-            )}
-          </View>
+          {/* Display selected machine (optional visual feedback) */}
+          {selectedMachine ? (
+            <Text style={{ marginTop: 8, fontWeight: "700", color: "#222" }}>Machine: {selectedMachine}</Text>
+          ) : null}
 
           <Text style={styles.label}>Description of Issue</Text>
           <TextInput
@@ -435,9 +420,9 @@ const handleSubmit = async () => {
           )}
 
           <TouchableOpacity
-            style={[styles.submitBtn, (!isModelValid || !category || !description.trim()) && styles.submitBtnDisabled]}
+            style={[styles.submitBtn, (!selectedMachine || !description.trim()) && styles.submitBtnDisabled]}
             onPress={handleSubmit}
-            disabled={!isModelValid || !category || !description.trim()}
+            disabled={!selectedMachine || !description.trim()}
           >
             <Text style={styles.submitText}>Submit Request</Text>
           </TouchableOpacity>
@@ -449,6 +434,7 @@ const handleSubmit = async () => {
   )
 }
 
+/* ---------------- styles and helper components remain unchanged ---------------- */
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#E8ECF5" },

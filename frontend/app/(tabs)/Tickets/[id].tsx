@@ -32,11 +32,10 @@ interface Attachment {
 
 interface Ticket {
   id: number | string;
+  ticketId?: number;
   title?: string;
   date: string;
   machineCode: string;
-  model: string;
-  category: string;
   description: string;
   status: 'open' | 'in progress' | 'closed';
   attachments?: Attachment[];
@@ -80,11 +79,10 @@ export default function TicketDetails() {
 
           setTicket({
             id: ticketSnap.id,
+            ticketId: data.ticketId || null,
             title: data.description?.substring(0, 50) || 'Service Request',
             date: formattedDate,
             machineCode: data.machineCode || 'N/A',
-            model: data.model || 'N/A',
-            category: data.category || 'N/A',
             description: data.description || 'No description provided',
             status: data.status || 'open',
             attachments: data.attachments || [],
@@ -122,6 +120,8 @@ export default function TicketDetails() {
       </View>
     );
   }
+    // Format ticketId as Ticket #0001
+
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 32 }}>
@@ -129,7 +129,7 @@ export default function TicketDetails() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backBtnText}>{'< Back'}</Text>
         </TouchableOpacity>
-        <Text style={styles.header}>Ticket #{typeof ticket.id === 'string' ? ticket.id.substring(0, 8) : ticket.id}</Text>
+        <Text style={styles.header}>  Ticket {ticket.ticketId ? `#${String(ticket.ticketId).padStart(4, '0')}` : `#${String(ticket.id).substring(0, 6)}`} </Text>
       </View>
 
       <View style={styles.card}>
@@ -140,8 +140,7 @@ export default function TicketDetails() {
         <Text style={styles.muted}>Date: {ticket.date}</Text>
         <View style={styles.separator} />
         <InfoRow label="Machine Code" value={ticket.machineCode} />
-        <InfoRow label="Model" value={ticket.model} />
-        <InfoRow label="Category" value={ticket.category} />
+
         <View style={styles.separator} />
         <Text style={styles.sectionTitle}>Description</Text>
         <Text style={styles.body}>{ticket.description}</Text>

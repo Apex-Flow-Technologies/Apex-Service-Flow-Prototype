@@ -97,7 +97,12 @@ export default function Tickets() {
 
         userTickets.push({
           id: doc.id,
-          title: data.description?.substring(0, 50) || 'Service Request',
+          title: data.description
+            ? (() => {
+              const words = data.description.trim().split(/\s+/);
+              return words.length > 3 ? words.slice(0, 3).join(" ") + "..." : data.description;
+             })()
+            : "Service Request",
           date: formattedDate,
           status: data.status || 'open',
         });

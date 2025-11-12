@@ -1,13 +1,70 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from '../../firebaseConfig';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 // Home screen uses static demo content
 const userProfileImage = 'https://randomuser.me/api/portraits/women/68.jpg';
 
 export default function HomeScreen() {
   const router = useRouter();
+  
+  const [openCount, setOpenCount] = useState(0);
+  const [progressCount, setProgressCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+useEffect(() => {
+  const fetchTicketCounts = async () => {
+    try {
+      const userStr = await AsyncStorage.getItem('currentUser');
+      if (!userStr) return;
+      const user = JSON.parse(userStr);
+
+      const q = query(collection(db, 'tickets'), where('userId', '==', user.id));
+
+      // 🔥 Real-time listener
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        let open = 0, progress = 0, closed = 0;
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const status = (data.status || '').toLowerCase();
+          if (status === 'open') open++;
+          else if (status === 'in progress') progress++;
+          else if (status === 'closed') closed++;
+        });
+
+        setOpenCount(open);
+        setProgressCount(progress);
+        setCompletedCount(closed);
+        setLoading(false);
+      });
+
+      // cleanup listener when screen unmounts
+      return () => unsubscribe();
+    } catch (err) {
+      console.log('Error setting up ticket listener:', err);
+      setLoading(false);
+    }
+  };
+
+  fetchTicketCounts();
+}, []);
+
+
+  if (loading) {
+    return (
+      <View style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#1e90ff" />
+        <Text style={{ color: '#666', marginTop: 10 }}>Loading tickets...</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -30,17 +87,17 @@ export default function HomeScreen() {
           <View style={styles.statsRow}>
             <TouchableOpacity style={[styles.statCard, styles.statCardOpen]}>
               <Ionicons name="folder-open-outline" size={20} color="#FFA000" />
-              <Text style={styles.statNumber}>3</Text>
+              <Text style={styles.statNumber}>{openCount}</Text>
               <Text style={styles.statLabel}>Open</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.statCard, styles.statCardProgress]}>
               <Ionicons name="sync-circle-outline" size={20} color="#1976D2" />
-              <Text style={styles.statNumber}>2</Text>
+              <Text style={styles.statNumber}>{progressCount}</Text>
               <Text style={styles.statLabel}>On Progress</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.statCard, styles.statCardCompleted]}>
               <Ionicons name="checkmark-done-circle-outline" size={20} color="#388E3C" />
-              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statNumber}>{completedCount}</Text>
               <Text style={styles.statLabel}>Completed</Text>
             </TouchableOpacity>
           </View>

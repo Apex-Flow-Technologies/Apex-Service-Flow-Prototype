@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Home, Ticket, CircleUser, BarChart3, Users } from "lucide-react-native";
+import { Home, Ticket, CircleUser, UserCog, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
 import { Platform, AppState, View } from 'react-native';
 
@@ -117,23 +117,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="Reports"
+        name="Technician"
         options={{
-          title: 'Reports',
+          title: 'Technician',
           tabBarIcon: ({ color }) => (
-            <BarChart3 color={color} size={26} />
+            <UserCog color={color} size={26} />
           ),
         }}
       />
-      <Tabs.Screen
-        name="ManageUsers"
-        options={{
-          title: 'Users',
-          tabBarIcon: ({ color }) => (
-            <Users color={color} size={26} />
-          ),
-        }}
-      />
+      
       <Tabs.Screen
         name="PendingTickets"
         options={{

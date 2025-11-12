@@ -1,199 +1,351 @@
-import React from 'react'
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native'
-import { BarChart3, Ticket, Users, Clock, CheckCircle2, AlertTriangle, Plus, Settings } from 'lucide-react-native'
+import React from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
-const ManagerHome = () => {
-  const kpis = [
-    { label: 'Open Tickets', value: 24, icon: <Ticket color="#1e88e5" size={22} />, bg: '#E3F2FD' },
-    { label: 'SLA Breaches', value: 3, icon: <AlertTriangle color="#d32f2f" size={22} />, bg: '#FFEBEE' },
-    { label: 'Technicians', value: 12, icon: <Users color="#2e7d32" size={22} />, bg: '#E8F5E9' },
-    { label: 'Resolved Today', value: 18, icon: <CheckCircle2 color="#00897b" size={22} />, bg: '#E0F2F1' },
-  ]
+// Static demo content for the Manager
+const managerProfileImage = 'https://randomuser.me/api/portraits/men/75.jpg';
 
-  const recent = [
-    { id: 'TCK-1042', title: 'Printer not working', status: 'Open', priority: 'High', time: '10m ago' },
-    { id: 'TCK-1041', title: 'Email sync issue', status: 'In Progress', priority: 'Medium', time: '42m ago' },
-    { id: 'TCK-1039', title: 'Network latency', status: 'Resolved', priority: 'Low', time: '1h ago' },
-  ]
+// Demo data for recent tickets, similar to your original component
+const recentTickets = [
+  { id: 'TCK-1042', title: 'Printer not working', status: 'Open', customer: 'Jane Doe', date: '2025-03-08' },
+  { id: 'TCK-1041', title: 'Email sync issue', status: 'In Progress', customer: 'John Smith', date: '2025-03-08' },
+  { id: 'TCK-1039', title: 'Network latency', status: 'Pending Closure', customer: 'Acme Corp', date: '2025-03-08' },
+];
+
+// Helper function to get status styles
+const getStatusStyles = (status: string) => {
+  if (status === 'Open') {
+    return { text: styles.statusOpen, icon: 'alert-circle-outline', color: '#d32f2f' };
+  }
+  if (status === 'In Progress') {
+    return { text: styles.statusInProgress, icon: 'sync-circle-outline', color: '#2E86DE' };
+  }
+  // Default for 'Pending Closure' or 'Closed'
+  return { text: styles.statusClosed, icon: 'checkmark-circle-outline', color: '#43A047' };
+};
+
+export default function ManagerHomeScreen() {
+  const router = useRouter();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>Manager Dashboard</Text>
-
-      <View style={styles.kpiGrid}>
-        {kpis.map((k) => (
-          <View key={k.label} style={[styles.kpiCard, { backgroundColor: k.bg }] }>
-            <View style={styles.kpiIcon}>{k.icon}</View>
-            <Text style={styles.kpiValue}>{k.value}</Text>
-            <Text style={styles.kpiLabel}>{k.label}</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        
+        {/* Profile Container */}
+        <View style={styles.profileContainer}>
+          <View style={styles.profileRow}>
+            <View style={styles.profilePicWrapper}>
+              <Image source={{ uri: managerProfileImage }} style={styles.profilePic} />
+              <View style={styles.badge}>
+                <Ionicons name="shield-checkmark" size={20} color="#2E86DE" />
+              </View>
+            </View>
+            <View>
+              <Text style={styles.userName}>Hello, Manager</Text>
+              <Text style={styles.memberSince}>Manager Portal</Text>
+            </View>
           </View>
-        ))}
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.85}>
-            <Plus color="#fff" size={20} />
-            <Text style={styles.actionText}>New Ticket</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#6C63FF' }]} activeOpacity={0.85}>
-            <BarChart3 color="#fff" size={20} />
-            <Text style={styles.actionText}>View Reports</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#00BFA5' }]} activeOpacity={0.85}>
-            <Settings color="#fff" size={20} />
-            <Text style={styles.actionText}>Configure</Text>
-          </TouchableOpacity>
+          {/* Stats Section - Adapted for Manager */}
+          <View style={styles.statsRow}>
+            <TouchableOpacity style={[styles.statCard, styles.statCardOpen]}>
+              <Ionicons name="folder-open-outline" size={20} color="#FFA000" />
+              <Text style={styles.statNumber}>5</Text>
+              <Text style={styles.statLabel}>New Tickets</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.statCard, styles.statCardProgress]}>
+              <Ionicons name="sync-circle-outline" size={20} color="#1976D2" />
+              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statLabel}>In Progress</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.statCard, styles.statCardCompleted]}>
+              <Ionicons name="hourglass-outline" size={20} color="#388E3C" />
+              <Text style={styles.statNumber}>3</Text>
+              <Text style={styles.statLabel}>Pending Closure</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recent Tickets</Text>
-        {recent.map((t) => (
-          <View key={t.id} style={styles.ticketRow}>
-            <View style={styles.ticketLeft}>
-              <Ticket color="#2196F3" size={20} />
-              <View style={{ marginLeft: 10 }}>
-                <Text style={styles.ticketTitle}>{t.title}</Text>
-                <Text style={styles.ticketMeta}>{t.id} · {t.priority}</Text>
-              </View>
-            </View>
-            <View style={styles.ticketRight}>
-              <Text style={[styles.badge, badgeColor(t.status)]}>{t.status}</Text>
-              <View style={styles.timeRow}>
-                <Clock color="#78909C" size={16} />
-                <Text style={styles.timeText}>{t.time}</Text>
-              </View>
-            </View>
+        {/* Quick Actions Container */}
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => router.push('/(managerTabs)/PendingTickets')}
+            >
+              <Ionicons name="person-add-outline" size={22} color="#fff" />
+              <Text style={styles.actionButtonText}>Assign Tickets</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.actionButtonSecondary]}
+              onPress={() => router.push('/(managerTabs)/Technician')} // Example route
+            >
+              <Ionicons name="people-outline" size={22} color="#2E86DE" />
+              <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>Manage Team</Text>
+            </TouchableOpacity>
           </View>
-        ))}
-      </View>
-    </ScrollView>
-  )
+        </View>
+
+        {/* Tickets Container */}
+        <View style={styles.ticketsContainer}>
+          {/* Section header with "All Tickets" button */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Tickets</Text>
+            <TouchableOpacity onPress={() => router.push('/(managerTabs)/PendingTickets')}>
+              <Text style={styles.viewAllText}>All Tickets →</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Map over the manager's recent tickets */}
+          {recentTickets.map((ticket) => {
+            const status = getStatusStyles(ticket.status);
+            return (
+              <View key={ticket.id} style={styles.ticketCard}>
+                <View style={styles.ticketCardHeader}>
+                  <Text style={styles.ticketId}>{ticket.id} (from {ticket.customer})</Text>
+                  <Ionicons Name={status.icon} size={18} color={status.color} />
+                </View>
+                <Text style={styles.ticketSubject}>{ticket.title}</Text>
+                <View style={styles.ticketCardFooter}>
+                  <Text style={status.text}>{ticket.status}</Text>
+                  <Text style={styles.ticketDate}>{ticket.date}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Spacer for tab bar */}
+        <View style={{ height: 60 }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-const badgeColor = (status: string) => {
-  if (status === 'Open') return { backgroundColor: '#FFEBEE', color: '#d32f2f', borderColor: '#ffcdd2' }
-  if (status === 'In Progress') return { backgroundColor: '#FFF8E1', color: '#ef6c00', borderColor: '#ffe0b2' }
-  return { backgroundColor: '#E8F5E9', color: '#2e7d32', borderColor: '#c8e6c9' }
-}
-
-export default ManagerHome
-
+// Styles are copied from the Customer's HomeScreen and adapted
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#E8ECF5',
+  },
   container: {
-    padding: 16,
-    paddingBottom: 32,
-    backgroundColor: '#fafbfc',
+    flex: 1,
   },
-  header: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#263238',
-    marginBottom: 14,
+  content: {
+    padding: 18,
+    paddingTop: 40,
+    paddingBottom: 0,
   },
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  kpiCard: {
-    width: '48%',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
-  kpiIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  profileContainer: {
     backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 18,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    marginHorizontal: 4,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  kpiValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#263238',
+  statCardOpen: {
+    backgroundColor: '#FFF8E1',
   },
-  kpiLabel: {
+  statCardProgress: {
+    backgroundColor: '#E3F2FD',
+  },
+  statCardCompleted: {
+    backgroundColor: '#E8F5E9',
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#212121',
+    marginTop: 5,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#616161',
     marginTop: 2,
-    color: '#546E7A',
     fontWeight: '600',
   },
-  section: {
-    marginTop: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#37474F',
-    marginBottom: 10,
+  // New Quick Actions styles
+  quickActionsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 18,
   },
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 12,
   },
-  actionBtn: {
+  actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2196F3',
+    backgroundColor: '#2E86DE',
     borderRadius: 12,
     paddingVertical: 14,
-    width: '32%'
+    marginHorizontal: 4,
   },
-  actionText: {
+  actionButtonText: {
     color: '#fff',
     fontWeight: '700',
+    fontSize: 14,
     marginLeft: 8,
   },
-  ticketRow: {
+  actionButtonSecondary: {
+    backgroundColor: '#E3F2FD',
+  },
+  actionButtonTextSecondary: {
+    color: '#2E86DE',
+  },
+  // Ticket list styles
+  ticketsContainer: {
     backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 18,
+  },
+  sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#ECEFF1',
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  ticketLeft: {
+  viewAllText: {
+    backgroundColor: '#2E86DE',
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
-  ticketTitle: {
-    fontWeight: '700',
-    color: '#263238',
+  profilePicWrapper: {
+    position: 'relative',
+    marginRight: 18,
   },
-  ticketMeta: {
-    color: '#78909C',
-    marginTop: 2,
-  },
-  ticketRight: {
-    alignItems: 'flex-end',
+  profilePic: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   badge: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-    fontSize: 12,
+    position: 'absolute',
+    bottom: 0,
+    right: -5,
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 2,
+    elevation: 4,
+  },
+  userName: {
+    fontSize: 20,
     fontWeight: '700',
-    textTransform: 'none',
-  } as any,
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
+    color: '#212121',
   },
-  timeText: {
-    color: '#78909C',
-    marginLeft: 6,
+  memberSince: {
     fontSize: 12,
+    color: '#8A8A8A',
+    marginTop: 3,
   },
-})
+  sectionTitle: {
+    fontWeight: '700',
+    fontSize: 16,
+    color: '#222',
+  },
+  ticketCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  ticketCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  ticketId: {
+    fontWeight: '600',
+    color: '#363636',
+    fontSize: 14,
+  },
+  ticketSubject: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginVertical: 8,
+    color: '#252525',
+  },
+  ticketCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  // Status text styles
+  statusOpen: {
+    color: '#d32f2f',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  statusInProgress: {
+    color: '#2E86DE',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  statusClosed: {
+    color: '#43A047',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  ticketDate: {
+    color: '#B0B0B0',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+});

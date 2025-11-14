@@ -4,7 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../../firebaseConfig';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+
+interface RecentTicket {
+  id: string;
+  ticketId: string;
+  description: string;
+  status: string;
+  date: string;
+}
 
 // Home screen uses static demo content
 const userProfileImage = 'https://randomuser.me/api/portraits/women/68.jpg';
@@ -16,6 +24,9 @@ export default function HomeScreen() {
   const [progressCount, setProgressCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const [recentTickets, setRecentTickets] = useState<RecentTicket[]>([]);
+
 
 useEffect(() => {
   const fetchTicketCounts = async () => {
@@ -54,6 +65,53 @@ useEffect(() => {
 
   fetchTicketCounts();
 }, []);
+
+useEffect(() => {
+    const fetchRecentTickets = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('currentUser');
+        if (!userStr) return;
+
+        const user = JSON.parse(userStr);
+
+        const q = query(
+          collection(db, 'tickets'),
+          where('userId', '==', user.id),
+          orderBy('createdAt', 'desc'),
+          limit(2)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const list: RecentTicket[] = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+
+            let date = 'N/A';
+            if (data.createdAt?.toDate) {
+              date = data.createdAt.toDate().toISOString().split('T')[0];
+            }
+
+            return {
+              id: docSnap.id,
+              ticketId: data.ticketId
+                ? `#${String(data.ticketId).padStart(4, '0')}`
+                : `#${docSnap.id.slice(0, 6)}`,
+              description: data.description || 'No details provided',
+              status: data.status || 'open',
+              date: date
+            };
+          });
+
+          setRecentTickets(list);
+        });
+
+        return () => unsubscribe();
+      } catch (err) {
+        console.log('Error fetching recent tickets:', err);
+      }
+    };
+
+    fetchRecentTickets();
+  }, []);
 
 
   if (loading) {
@@ -102,41 +160,47 @@ useEffect(() => {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Tickets Container */}
-        <View style={styles.ticketsContainer}>
-          {/* Section header with "All Tickets" button */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Tickets</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/Tickets')}>
-              <Text style={styles.viewAllText}>All Tickets →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.ticketCard}>
-            <View style={styles.ticketCardHeader}>
-              <Text style={styles.ticketId}>Ticket ID: #123456</Text>
-              <Ionicons name="create-outline" size={18} color="#6C63FF" />
-            </View>
-            <Text style={styles.ticketSubject}>Issue with Laptop Battery</Text>
-            <View style={styles.ticketCardFooter}>
-              <Text style={styles.statusInProgress}>In Progress</Text>
-              <Text style={styles.ticketDate}>2024-03-08</Text>
-            </View>
-          </View>
-
-          <View style={styles.ticketCard}>
-            <View style={styles.ticketCardHeader}>
-              <Text style={styles.ticketId}>Ticket ID: #123455</Text>
-              <Ionicons name="checkmark-circle" size={18} color="#43A047" />
-            </View>
-            <Text style={styles.ticketSubject}>Query about Warranty</Text>
-            <View style={styles.ticketCardFooter}>
-              <Text style={styles.statusClosed}>Closed</Text>
-              <Text style={styles.ticketDate}>2024-03-01</Text>
-            </View>
-          </View>
+      {/* Recent Tickets Container */}
+      <View style={styles.ticketsContainer}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Tickets</Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/Tickets')}>
+            <Text style={styles.viewAllText}>All Tickets →</Text>
+          </TouchableOpacity>
         </View>
+
+        {/* 💙 Render REAL recent tickets */}
+        {recentTickets.map((t) => (
+          <View key={t.id} style={styles.ticketCard}>
+            <View style={styles.ticketCardHeader}>
+              <Text style={styles.ticketId}>Ticket ID: {t.ticketId}</Text>
+
+              {t.status.toLowerCase() === 'closed' ? (
+                <Ionicons name="checkmark-circle" size={18} color="#43A047" />
+              ) : (
+                <Ionicons name="create-outline" size={18} color="#6C63FF" />
+              )}
+            </View>
+
+            <Text style={styles.ticketSubject}>{t.description}</Text>
+
+            <View style={styles.ticketCardFooter}>
+              <Text
+                style={
+                  t.status.toLowerCase() === 'closed'
+                    ? styles.statusClosed
+                    : styles.statusInProgress
+                }
+              >
+                {t.status}
+              </Text>
+
+              <Text style={styles.ticketDate}>{t.date}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
 
         {/* Raise Ticket Button */}
         <TouchableOpacity style={styles.raiseTicketButton} onPress={() => router.push('/(tabs)/RaiseTicket')}>

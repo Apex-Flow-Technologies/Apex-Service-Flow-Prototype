@@ -2,32 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-
-// on line 118 create a slug for the ticket details
-// 1. Defined a type for the Ticket object for TypeScript
-interface Ticket {
-  id: string;
-  title: string;
-  customer: string;
-  status: 'Open' | 'In Progress' | 'Pending Closure' | 'Closed';
-  date: string;
-}
-
-// Mock data for all tickets, now using the Ticket type
-const ALL_TICKETS: Ticket[] = [
-  { id: 'TCK-1042', title: 'Printer not working', customer: 'Jane Doe', status: 'Open', date: '2025-11-12' },
-  { id: 'TCK-1041', title: 'Email sync issue', customer: 'John Smith', status: 'In Progress', date: '2025-11-11' },
-  { id: 'TCK-1039', title: 'Network latency', customer: 'Acme Corp', status: 'Pending Closure', date: '2025-11-10' },
-  { id: 'TCK-1038', title: 'Laptop Battery Dead', customer: 'Jane Doe', status: 'Closed', date: '2025-11-09' },
-  { id: 'TCK-1037', title: 'Cannot access server', customer: 'Bob Johnson', status: 'In Progress', date: '2025-11-09' },
-  { id: 'TCK-1036', title: 'New Software Request', customer: 'Alice Smith', status: 'Open', date: '2025-11-09' },
-  { id: 'TCK-1035', title: 'PC setup for new hire', customer: 'HR Dept', status: 'Closed', date: '2025-11-08' },
-];
+import { ALL_TICKETS, Ticket } from './data/tickets';
 
 const FILTER_TABS = ['New', 'In Progress', 'Closed'];
 
 // Helper function to get status styles
-const getStatusStyles = (status: Ticket['status']) => { // Used the type here
+const getStatusStyles = (status: Ticket['status']) => {
   if (status === 'Open') {
     return { text: styles.statusOpen, icon: 'alert-circle-outline', color: '#d32f2f' };
   }
@@ -116,11 +96,14 @@ export default function TicketsScreen() {
             <TouchableOpacity 
               key={ticket.id} 
               style={styles.ticketCard}
-              // onPress={() => router.push({ pathname: '/(managerTabs)/TicketDetails', params: { id: ticket.id } })}
+              onPress={() => {
+                // Navigate to ticket detail page
+                router.push(`/(managerTabs)/Ticket/${ticket.id}` as any);
+              }}
             >
               <View style={styles.ticketCardHeader}>
                 <Text style={styles.ticketId}>{ticket.id} (from {ticket.customer})</Text>
-                <Ionicons Name={status.icon} size={18} color={status.color} />
+                <Ionicons name={status.icon as any} size={18} color={status.color} />
               </View>
               <Text style={styles.ticketSubject}>{ticket.title}</Text>
               <View style={styles.ticketCardFooter}>

@@ -105,7 +105,7 @@ export default function ManagerHomeScreen() {
               <View key={ticket.id} style={styles.ticketCard}>
                 <View style={styles.ticketCardHeader}>
                   <Text style={styles.ticketId}>{ticket.id} (from {ticket.customer})</Text>
-                  <Ionicons Name={status.icon} size={18} color={status.color} />
+                  <Ionicons name={status.icon as any} size={18} color={status.color} />
                 </View>
                 <Text style={styles.ticketSubject}>{ticket.title}</Text>
                 <View style={styles.ticketCardFooter}>

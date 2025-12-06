@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Home, Ticket, CircleUser, UserCog, Users } from "lucide-react-native";
+import { Home, Ticket, CircleUser, UserCog } from "lucide-react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
-import { Platform, AppState, View } from 'react-native';
+import { Platform, AppState } from 'react-native';
+import { HapticTab } from '@/components/haptic-tab';
 
 // Try to require expo-navigation-bar at runtime. We do this so iOS and
 // environments without the package won't crash during bundling.
@@ -23,8 +24,6 @@ if (!NavigationBar) {
   // eslint-disable-next-line no-console
   console.warn('[app/(tabs)/_layout] expo-navigation-bar is not installed or unavailable. System nav color change is disabled.');
 }
-
-import { HapticTab } from '@/components/haptic-tab';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -142,6 +141,12 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <CircleUser color={color} size={26} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="Ticket"
+        options={{
+          href: null, // Hide this route from the tab bar
         }}
       />
     </Tabs>

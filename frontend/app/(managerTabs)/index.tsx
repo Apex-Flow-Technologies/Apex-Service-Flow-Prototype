@@ -1,32 +1,206 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView,  ActivityIndicator, } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { db } from '../../firebaseConfig';
+import { collection, doc, getDoc, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Static demo content for the Manager
 const managerProfileImage = 'https://randomuser.me/api/portraits/men/75.jpg';
 
-// Demo data for recent tickets, similar to your original component
-const recentTickets = [
-  { id: 'TCK-1042', title: 'Printer not working', status: 'Open', customer: 'Jane Doe', date: '2025-03-08' },
-  { id: 'TCK-1041', title: 'Email sync issue', status: 'In Progress', customer: 'John Smith', date: '2025-03-08' },
-  { id: 'TCK-1039', title: 'Network latency', status: 'Pending Closure', customer: 'Acme Corp', date: '2025-03-08' },
-];
-
-// Helper function to get status styles
-const getStatusStyles = (status: string) => {
-  if (status === 'Open') {
-    return { text: styles.statusOpen, icon: 'alert-circle-outline', color: '#d32f2f' };
-  }
-  if (status === 'In Progress') {
-    return { text: styles.statusInProgress, icon: 'sync-circle-outline', color: '#2E86DE' };
-  }
-  // Default for 'Pending Closure' or 'Closed'
-  return { text: styles.statusClosed, icon: 'checkmark-circle-outline', color: '#43A047' };
-};
+const RECENT_LIMIT = 2;
 
 export default function ManagerHomeScreen() {
   const router = useRouter();
+
+  // counts
+  const [openCount, setOpenCount] = useState<number | null>(null);
+  const [inProgressCount, setInProgressCount] = useState<number | null>(null);
+  const [completedCount, setCompletedCount] = useState<number | null>(null);
+
+  // recent open tickets list
+  const [recentOpenTickets, setRecentOpenTickets] = useState<any[]>([]);
+  const [loadingCounts, setLoadingCounts] = useState(true);
+  const [loadingRecent, setLoadingRecent] = useState(true);
+
+  useEffect(() => {
+    let countsUnsub: (() => void) | null = null;
+    let recentUnsub: (() => void) | null = null;
+
+    const start = async () => {
+      const userStr = await AsyncStorage.getItem('currentUser');
+      const user = userStr ? JSON.parse(userStr) : null;
+      // treat as manager if role/type indicates so
+      const isManager =
+        user && (user.role === 'manager' || user.isManager === true || user.type === 'manager');
+
+      //
+      // 1) Try reading counts from metadata/ticketCounter (if you keep counts there)
+      //    If metadata doc doesn't have precomputed counts, fallback to counting tickets collection.
+      //
+      try {
+        const metaRef = doc(db, 'metadata', 'ticketCounter');
+        const metaSnap = await getDoc(metaRef);
+        if (metaSnap.exists()) {
+          const m = metaSnap.data();
+          // Expect fields like openCount, inProgressCount, closedCount (change keys if you used different)
+          if (
+            typeof m.openCount === 'number' ||
+            typeof m.inProgressCount === 'number' ||
+            typeof m.closedCount === 'number'
+          ) {
+            setOpenCount(typeof m.openCount === 'number' ? m.openCount : 0);
+            setInProgressCount(typeof m.inProgressCount === 'number' ? m.inProgressCount : 0);
+            setCompletedCount(typeof m.closedCount === 'number' ? m.closedCount : 0);
+            setLoadingCounts(false);
+          } else {
+            // metadata exists but doesn't have counts -> fallback to live counting
+            subscribeCountsFromTickets();
+          }
+        } else {
+          // metadata doc not present -> fallback to live counting
+          subscribeCountsFromTickets();
+        }
+      } catch (err) {
+        console.warn('metadata read failed, falling back to live counts', err);
+        subscribeCountsFromTickets();
+      }
+
+      //
+      // 2) Subscribe to recent open tickets (for manager show all open tickets, else only user's open)
+      //
+      try {
+        const ticketsCol = collection(db, 'tickets');
+        let q;
+        if (isManager) {
+          q = query(ticketsCol, where('status', '==', 'open'), orderBy('createdAt', 'desc'), limit(RECENT_LIMIT));
+        } else {
+          if (!user) {
+            setRecentOpenTickets([]);
+            setLoadingRecent(false);
+            return;
+          }
+          q = query(
+            ticketsCol,
+            where('userId', '==', user.id),
+            where('status', '==', 'open'),
+            orderBy('createdAt', 'desc'),
+            limit(RECENT_LIMIT)
+          );
+        }
+
+        recentUnsub = onSnapshot(
+          q,
+          (snap) => {
+            const list = snap.docs.map((d) => {
+              const data = d.data() as any;
+              // format ticketId: if numeric ticketId present use TCK-<num>, else derive short id
+              const ticketId = data.ticketId ? `TCK-${data.ticketId}` : `#${d.id.slice(0, 6)}`;
+              // get userName
+              const userName = data.userName || data.customer || 'Unknown';
+              // format date (YYYY-MM-DD) if Firestore timestamp present
+              let date = 'N/A';
+              if (data.createdAt?.toDate) {
+                try {
+                  date = data.createdAt.toDate().toISOString().split('T')[0];
+                } catch {
+                  date = String(data.createdAt);
+                }
+              } else if (data.createdAt) {
+                date = String(data.createdAt);
+              }
+              // description: first 3 words
+              const descRaw = (data.description || '').trim();
+              let shortDesc = descRaw;
+              if (descRaw) {
+                const words = descRaw.split(/\s+/);
+                shortDesc = words.length > 3 ? words.slice(0, 3).join(' ') + '...' : descRaw;
+              } else {
+                shortDesc = 'No details provided';
+              }
+              return {
+                id: d.id,
+                ticketId,
+                userName,
+                description: shortDesc,
+                status: data.status || 'open',
+                date,
+                raw: data,
+              };
+            });
+
+            setRecentOpenTickets(list);
+            setLoadingRecent(false);
+          },
+          (err) => {
+            console.error('recent open tickets onSnapshot error', err);
+            setLoadingRecent(false);
+          }
+        );
+      } catch (err) {
+        console.error('subscribe recent open tickets failed', err);
+        setLoadingRecent(false);
+      }
+
+      // helper fallback - subscribe to counts by scanning tickets collection live
+      function subscribeCountsFromTickets() {
+        try {
+          const ticketsCol = collection(db, 'tickets');
+          let q;
+          if (isManager) {
+            q = query(ticketsCol);
+          } else {
+            if (!user) {
+              setOpenCount(0);
+              setInProgressCount(0);
+              setCompletedCount(0);
+              setLoadingCounts(false);
+              return;
+            }
+            q = query(ticketsCol, where('userId', '==', user.id));
+          }
+
+          countsUnsub = onSnapshot(
+            q,
+            (snap) => {
+              let open = 0,
+                progress = 0,
+                closed = 0;
+              snap.forEach((doc) => {
+                const d = doc.data() as any;
+                const status = (d.status || '').toString().toLowerCase();
+                if (status === 'open') open++;
+                else if (status === 'in progress' || status === 'pending closure') progress++;
+                else if (status === 'closed') closed++;
+              });
+              setOpenCount(open);
+              setInProgressCount(progress);
+              setCompletedCount(closed);
+              setLoadingCounts(false);
+            },
+            (err) => {
+              console.error('counts onSnapshot error', err);
+              setLoadingCounts(false);
+            }
+          );
+        } catch (err) {
+          console.error('subscribeCountsFromTickets error', err);
+          setLoadingCounts(false);
+        }
+      }
+    };
+
+    start();
+
+    return () => {
+      if (countsUnsub) countsUnsub();
+      if (recentUnsub) recentUnsub();
+    };
+  }, []);
+
+  // Show spinner until counts are ready (you can adjust)
+  const countsReady = !loadingCounts && openCount !== null && inProgressCount !== null && completedCount !== null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -47,40 +221,37 @@ export default function ManagerHomeScreen() {
             </View>
           </View>
 
-          {/* Stats Section - Adapted for Manager */}
+          {/* Stats Section - dynamic counts */}
           <View style={styles.statsRow}>
             <TouchableOpacity style={[styles.statCard, styles.statCardOpen]}>
               <Ionicons name="folder-open-outline" size={20} color="#FFA000" />
-              <Text style={styles.statNumber}>5</Text>
+              <Text style={styles.statNumber}>{countsReady ? openCount : '—'}</Text>
               <Text style={styles.statLabel}>New Tickets</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.statCard, styles.statCardProgress]}>
               <Ionicons name="sync-circle-outline" size={20} color="#1976D2" />
-              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statNumber}>{countsReady ? inProgressCount : '—'}</Text>
               <Text style={styles.statLabel}>In Progress</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.statCard, styles.statCardCompleted]}>
               <Ionicons name="hourglass-outline" size={20} color="#388E3C" />
-              <Text style={styles.statNumber}>3</Text>
+              <Text style={styles.statNumber}>{countsReady ? completedCount : '—'}</Text>
               <Text style={styles.statLabel}>Pending Closure</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Quick Actions Container */}
+        {/* Quick Actions (unchanged UI) */}
         <View style={styles.quickActionsContainer}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsRow}>
-            <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => router.push('/(managerTabs)/PendingTickets')}
-            >
+            <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(managerTabs)/PendingTickets')}>
               <Ionicons name="person-add-outline" size={22} color="#fff" />
               <Text style={styles.actionButtonText}>Assign Tickets</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonSecondary]}
-              onPress={() => router.push('/(managerTabs)/Technician')} // Example route
+              onPress={() => router.push('/(managerTabs)/Technician')}
             >
               <Ionicons name="people-outline" size={22} color="#2E86DE" />
               <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>Manage Team</Text>
@@ -88,9 +259,8 @@ export default function ManagerHomeScreen() {
           </View>
         </View>
 
-        {/* Tickets Container */}
+        {/* Recent Tickets (ONLY OPEN tickets) */}
         <View style={styles.ticketsContainer}>
-          {/* Section header with "All Tickets" button */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Tickets</Text>
             <TouchableOpacity onPress={() => router.push('/(managerTabs)/PendingTickets')}>
@@ -98,32 +268,38 @@ export default function ManagerHomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Map over the manager's recent tickets */}
-          {recentTickets.map((ticket) => {
-            const status = getStatusStyles(ticket.status);
-            return (
-              <View key={ticket.id} style={styles.ticketCard}>
+          {/* Loading recent */}
+          {loadingRecent ? (
+            <ActivityIndicator size="small" color="#1e90ff" />
+          ) : recentOpenTickets.length === 0 ? (
+            <Text style={{ color: '#666' }}>No open tickets.</Text>
+          ) : (
+            recentOpenTickets.map((t) => (
+              <View key={t.id} style={styles.ticketCard}>
                 <View style={styles.ticketCardHeader}>
-                  <Text style={styles.ticketId}>{ticket.id} (from {ticket.customer})</Text>
-                  <Ionicons name={status.icon as any} size={18} color={status.color} />
+                  <Text style={styles.ticketId}>
+                    {t.ticketId} (from {t.userName})
+                  </Text>
+                  <Ionicons name="alert-circle-outline" size={18} color="#d32f2f" />
                 </View>
-                <Text style={styles.ticketSubject}>{ticket.title}</Text>
+
+                <Text style={styles.ticketSubject}>{t.description}</Text>
+
                 <View style={styles.ticketCardFooter}>
-                  <Text style={status.text}>{ticket.status}</Text>
-                  <Text style={styles.ticketDate}>{ticket.date}</Text>
+                  <Text style={styles.statusOpen}>Open</Text>
+                  <Text style={styles.ticketDate}>{t.date}</Text>
                 </View>
               </View>
-            );
-          })}
+            ))
+          )}
         </View>
 
-        {/* Spacer for tab bar */}
+        {/* spacer for bottom tab */}
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
-
 // Styles are copied from the Customer's HomeScreen and adapted
 const styles = StyleSheet.create({
   safeArea: {

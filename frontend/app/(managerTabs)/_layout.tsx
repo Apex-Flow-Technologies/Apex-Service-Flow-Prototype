@@ -4,6 +4,7 @@ import { Home, Ticket, CircleUser, UserCog } from "lucide-react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
 import { Platform, AppState } from 'react-native';
 import { HapticTab } from '@/components/haptic-tab';
+import { TicketsProvider } from './tickets-store';
 
 // Try to require expo-navigation-bar at runtime. We do this so iOS and
 // environments without the package won't crash during bundling.
@@ -66,8 +67,9 @@ export default function TabLayout() {
   }, []);
 
   return (
-    <Tabs
-      screenOptions={{
+    <TicketsProvider>
+      <Tabs
+        screenOptions={{
         headerShown: false,
         tabBarButton: HapticTab,
         
@@ -150,5 +152,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </TicketsProvider>
   );
 }

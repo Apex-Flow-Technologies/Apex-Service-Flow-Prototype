@@ -8,20 +8,23 @@ const managerProfileImage = 'https://randomuser.me/api/portraits/men/75.jpg';
 
 // Demo data for recent tickets, similar to your original component
 const recentTickets = [
-  { id: 'TCK-1042', title: 'Printer not working', status: 'Open', customer: 'Jane Doe', date: '2025-03-08' },
+  { id: 'TCK-1042', title: 'Printer not working', status: 'New', customer: 'Jane Doe', date: '2025-03-08' },
   { id: 'TCK-1041', title: 'Email sync issue', status: 'In Progress', customer: 'John Smith', date: '2025-03-08' },
-  { id: 'TCK-1039', title: 'Network latency', status: 'Pending Closure', customer: 'Acme Corp', date: '2025-03-08' },
+  { id: 'TCK-1039', title: 'Network latency', status: 'Waiting for Confirmation', customer: 'Acme Corp', date: '2025-03-08' },
 ];
 
 // Helper function to get status styles
 const getStatusStyles = (status: string) => {
-  if (status === 'Open') {
+  if (status === 'New') {
     return { text: styles.statusOpen, icon: 'alert-circle-outline', color: '#d32f2f' };
   }
   if (status === 'In Progress') {
     return { text: styles.statusInProgress, icon: 'sync-circle-outline', color: '#2E86DE' };
   }
-  // Default for 'Pending Closure' or 'Closed'
+  if (status === 'Waiting for Confirmation') {
+    return { text: styles.statusWaiting, icon: 'time-outline', color: '#f59e0b' };
+  }
+  // Default for 'Closed'
   return { text: styles.statusClosed, icon: 'checkmark-circle-outline', color: '#43A047' };
 };
 
@@ -335,6 +338,11 @@ const styles = StyleSheet.create({
   },
   statusInProgress: {
     color: '#2E86DE',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  statusWaiting: {
+    color: '#f59e0b',
     fontWeight: '700',
     fontSize: 13,
   },

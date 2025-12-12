@@ -1,40 +1,48 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { ALL_TICKETS, Ticket } from './data/tickets';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ticket } from './data/tickets';
+import { useTickets } from './tickets-store';
 
 const FILTER_TABS = ['New', 'In Progress', 'Closed'];
 
 // Helper function to get status styles
 const getStatusStyles = (status: Ticket['status']) => {
-  if (status === 'Open') {
+  if (status === 'New') {
     return { text: styles.statusOpen, icon: 'alert-circle-outline', color: '#d32f2f' };
   }
-  if (status === 'In Progress' || status === 'Pending Closure') {
+  if (status === 'In Progress') {
     return { text: styles.statusInProgress, icon: 'sync-circle-outline', color: '#2E86DE' };
+  }
+  if (status === 'Waiting for Confirmation') {
+    return { text: styles.statusWaiting, icon: 'time-outline', color: '#f59e0b' };
   }
   return { text: styles.statusClosed, icon: 'checkmark-circle-outline', color: '#43A047' };
 };
 
 export default function TicketsScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState(FILTER_TABS[0]);
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const { tickets } = useTickets();
+  const [activeTab, setActiveTab] = useState(
+    FILTER_TABS.includes(tab as string) ? (tab as string) : FILTER_TABS[0]
+  );
   const [searchQuery, setSearchQuery] = useState('');
 
   // 1. Filter by Active Tab
   const ticketsByTab = useMemo(() => {
     if (activeTab === 'New') {
-      return ALL_TICKETS.filter(t => t.status === 'Open');
+      return tickets.filter(t => t.status === 'New');
     }
     if (activeTab === 'In Progress') {
-      return ALL_TICKETS.filter(t => t.status === 'In Progress' || t.status === 'Pending Closure');
+      return tickets.filter(t => t.status === 'In Progress' || t.status === 'Waiting for Confirmation');
     }
     if (activeTab === 'Closed') {
-      return ALL_TICKETS.filter(t => t.status === 'Closed');
+      return tickets.filter(t => t.status === 'Closed');
     }
-    return ALL_TICKETS;
-  }, [activeTab]);
+    return tickets;
+  }, [activeTab, tickets]);
 
   // 2. Filter by Search Query
   const filteredTickets = useMemo(() => {
@@ -106,6 +114,12 @@ export default function TicketsScreen() {
                 <Ionicons name={status.icon as any} size={18} color={status.color} />
               </View>
               <Text style={styles.ticketSubject}>{ticket.title}</Text>
+              {ticket.technician && (
+                <View style={styles.technicianBadge}>
+                  <Ionicons name="construct-outline" size={14} color="#666" />
+                  <Text style={styles.technicianText}>{ticket.technician}</Text>
+                </View>
+              )}
               <View style={styles.ticketCardFooter}>
                 <Text style={status.text}>{ticket.status}</Text>
                 <Text style={styles.ticketDate}>{ticket.date}</Text>
@@ -238,6 +252,22 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     color: '#252525',
   },
+  technicianBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F4F8',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+    gap: 6,
+  },
+  technicianText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
   ticketCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -256,6 +286,11 @@ const styles = StyleSheet.create({
   },
   statusInProgress: {
     color: '#2E86DE',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  statusWaiting: {
+    color: '#f59e0b',
     fontWeight: '700',
     fontSize: 13,
   },

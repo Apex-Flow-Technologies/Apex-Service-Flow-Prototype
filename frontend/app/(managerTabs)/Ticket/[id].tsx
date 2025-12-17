@@ -1,38 +1,68 @@
 import React, { useMemo, useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, Alert, Pressable, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  Alert,
+  Pressable,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+
 import { Ticket } from '../data/tickets';
 import { useTickets } from '../tickets-store';
-import { INITIAL_TECHNICIANS, Technician } from '../data/technicians';
+import { fetchTechnicians, Technician } from '../data/technicians';
 
 export const href = null;
 
+
 const statusColor: Record<Ticket['status'], string> = {
-  'New': '#d32f2f',
+  New: '#d32f2f',
   'In Progress': '#2E86DE',
   'Waiting for Confirmation': '#f59e0b',
-  'Closed': '#43A047',
+  Closed: '#43A047',
 };
 
 const statusIcon: Record<Ticket['status'], string> = {
-  'New': 'alert-circle',
+  New: 'alert-circle',
   'In Progress': 'sync',
   'Waiting for Confirmation': 'time',
-  'Closed': 'checkmark-circle',
+  Closed: 'checkmark-circle',
 };
+
 
 export default function ManagerTicketDetails() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { getTicket, assignTicket, confirmClosure } = useTickets();
-  const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(null);
+
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [selectedTechnician, setSelectedTechnician] =
+    useState<Technician | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<View>(null);
 
-  const ticket = useMemo(() => (id ? getTicket(id) : undefined), [id, getTicket]);
-  
-  // Reset selected technician when ticket status changes (e.g., after assignment)
+  const ticket = useMemo(
+    () => (id ? getTicket(id) : undefined),
+    [id, getTicket]
+  );
+
+  /* -------- FETCH TECHNICIANS -------- */
+
+  useEffect(() => {
+    fetchTechnicians()
+      .then(list => {
+        // safety: only valid names
+        setTechnicians(list.filter(t => t?.name));
+      })
+      .catch(err => console.error('Failed to fetch technicians', err));
+  }, []);
+
+  /* -------- RESET DROPDOWN ON STATUS CHANGE -------- */
+
   useEffect(() => {
     if (ticket?.status !== 'New') {
       setSelectedTechnician(null);
@@ -40,47 +70,44 @@ export default function ManagerTicketDetails() {
     }
   }, [ticket?.status]);
 
-  const handleBack = () => {
-    router.replace('/(managerTabs)/PendingTickets');
-  };
+  /* -------- SAFETY -------- */
+
+  useEffect(() => {
+    if (!ticket) {
+      router.replace('/(managerTabs)/PendingTickets');
+    }
+  }, [ticket]);
+
+  if (!ticket) return null;
+
+  /* ---------------- ACTIONS ---------------- */
 
   const handleAssign = () => {
-    console.log('handleAssign called, selectedTechnician:', selectedTechnician);
     if (!selectedTechnician) {
-      Alert.alert('Technician Required', 'Please select a technician to assign this ticket.');
+      Alert.alert(
+        'Technician Required',
+        'Please select a technician to assign this ticket.'
+      );
       return;
     }
-    if (!ticket) {
-      Alert.alert('Error', 'Ticket not found.');
-      return;
-    }
-    
-    console.log('Assigning ticket:', ticket.id, 'to technician:', selectedTechnician.name);
-    
-    // Assign ticket and update status to "In Progress"
+
+    // ONLY technician name (2 args) 
     assignTicket(ticket.id, selectedTechnician.name);
-    
-    // Show success message and navigate to In Progress tab
+
     Alert.alert(
-      'Success', 
-      `Ticket assigned to ${selectedTechnician.name}!\n\nThe ticket has been moved to "In Progress".`, 
+      'Success',
+      `Ticket assigned to ${selectedTechnician.name}!\n\nMoved to "In Progress".`,
       [
-        { 
-          text: 'OK', 
-          onPress: () => router.replace('/(managerTabs)/PendingTickets?tab=In Progress') 
-        }
+        {
+          text: 'OK',
+          onPress: () =>
+            router.replace('/(managerTabs)/PendingTickets?tab=In Progress'),
+        },
       ]
     );
   };
 
-  const handleSelectTechnician = (tech: Technician) => {
-    setSelectedTechnician(tech);
-    setDropdownOpen(false);
-  };
-
   const handleConfirm = () => {
-    if (!ticket) return;
-    
     Alert.alert(
       'Confirm Closure',
       'Are you sure you want to confirm and close this ticket?',
@@ -88,40 +115,28 @@ export default function ManagerTicketDetails() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
-          style: 'default',
           onPress: () => {
             confirmClosure(ticket.id);
-            Alert.alert('Success', 'Ticket closed successfully!', [
-              { text: 'OK', onPress: () => router.replace('/(managerTabs)/PendingTickets?tab=Closed') }
-            ]);
-          }
-        }
+            router.replace('/(managerTabs)/PendingTickets?tab=Closed');
+          },
+        },
       ]
     );
   };
 
-  useEffect(() => {
-    if (!ticket) {
-      handleBack();
-    }
-    return () => {
-      // Component cleanup
-    };
-  }, [ticket]);
-
-
-  if (!ticket) return null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView 
-        style={styles.container} 
+      <ScrollView
+        style={styles.container}
         contentContainerStyle={styles.contentContainer}
         onScrollBeginDrag={() => dropdownOpen && setDropdownOpen(false)}
-        scrollEventThrottle={16}
       >
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+          <TouchableOpacity
+            onPress={() => router.replace('/(managerTabs)/PendingTickets')}
+            style={styles.backBtn}
+          >
             <Ionicons name="arrow-back" size={24} color="#1e90ff" />
           </TouchableOpacity>
           <Text style={styles.header}>Ticket Details</Text>
@@ -129,9 +144,19 @@ export default function ManagerTicketDetails() {
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.ticketId}>{ticket.id}</Text>
-            <View style={[styles.badge, { backgroundColor: statusColor[ticket.status] }]}>
-              <Ionicons name={statusIcon[ticket.status] as any} size={14} color="#fff" style={{ marginRight: 4 }} />
+            <Text style={styles.ticketId}>{ticket.ticketId}</Text>
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: statusColor[ticket.status] },
+              ]}
+            >
+              <Ionicons
+                name={statusIcon[ticket.status] as any}
+                size={14}
+                color="#fff"
+                style={{ marginRight: 4 }}
+              />
               <Text style={styles.badgeText}>{ticket.status}</Text>
             </View>
           </View>
@@ -169,62 +194,74 @@ export default function ManagerTicketDetails() {
           </View>
         </View>
 
-        {/* Action Cards based on status */}
+        {/* -------- ASSIGN TECHNICIAN -------- */}
         {ticket.status === 'New' && (
           <View style={styles.actionCard}>
             <View style={styles.actionCardHeader}>
               <Ionicons name="person-add-outline" size={24} color="#2E86DE" />
               <Text style={styles.actionCardTitle}>Assign Technician</Text>
             </View>
+
             <Text style={styles.actionCardDescription}>
               Assign this ticket to a technician to begin work.
             </Text>
-            
-            {/* Dropdown Container */}
+
             <View style={styles.dropdownWrapper} ref={dropdownRef}>
               <Pressable
-                style={[styles.dropdownButton, dropdownOpen && styles.dropdownButtonOpen]}
-                onPress={() => {
-                  console.log('Dropdown button pressed, current state:', dropdownOpen);
-                  setDropdownOpen(!dropdownOpen);
-                }}
+                style={[
+                  styles.dropdownButton,
+                  dropdownOpen && styles.dropdownButtonOpen,
+                ]}
+                onPress={() => setDropdownOpen(!dropdownOpen)}
               >
                 <View style={styles.dropdownButtonContent}>
-                  <Ionicons name="construct-outline" size={20} color={selectedTechnician ? "#212121" : "#8A8A8A"} style={styles.inputIcon} />
-                  <Text style={[styles.dropdownButtonText, !selectedTechnician && styles.dropdownButtonPlaceholder]}>
-                    {selectedTechnician ? selectedTechnician.name : 'Select a technician'}
+                  <Ionicons
+                    name="construct-outline"
+                    size={20}
+                    color={selectedTechnician ? '#212121' : '#8A8A8A'}
+                    style={styles.inputIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.dropdownButtonText,
+                      !selectedTechnician &&
+                        styles.dropdownButtonPlaceholder,
+                    ]}
+                  >
+                    {selectedTechnician
+                      ? selectedTechnician.name
+                      : 'Select a technician'}
                   </Text>
                 </View>
-                <Ionicons 
-                  name={dropdownOpen ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color="#8A8A8A" 
+                <Ionicons
+                  name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color="#8A8A8A"
                 />
               </Pressable>
 
-              {/* Dropdown List */}
               {dropdownOpen && (
                 <View style={styles.dropdownList}>
-                  {INITIAL_TECHNICIANS.map((item) => (
+                  {technicians.map(item => (
                     <TouchableOpacity
-                      key={item.id}
-                      activeOpacity={0.7}
+                      key={item.username}
                       style={[
                         styles.dropdownItem,
-                        selectedTechnician?.id === item.id && styles.dropdownItemSelected
+                        selectedTechnician?.username === item.username &&
+                          styles.dropdownItemSelected,
                       ]}
                       onPress={() => {
-                        console.log('Selecting technician:', item.name);
-                        handleSelectTechnician(item);
+                        setSelectedTechnician(item);
+                        setDropdownOpen(false);
                       }}
                     >
-                      <Image source={{ uri: item.image }} style={styles.dropdownItemImage} />
-                      <View style={styles.dropdownItemInfo}>
-                        <Text style={styles.dropdownItemName}>{item.name}</Text>
-                        <Text style={styles.dropdownItemSpecialty}>{item.specialty}</Text>
-                      </View>
-                      {selectedTechnician?.id === item.id && (
-                        <Ionicons name="checkmark-circle" size={20} color="#2E86DE" />
+                      <Text style={styles.dropdownItemName}>{item.name}</Text>
+                      {selectedTechnician?.username === item.username && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color="#2E86DE"
+                        />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -232,61 +269,80 @@ export default function ManagerTicketDetails() {
               )}
             </View>
 
-            <TouchableOpacity style={styles.primaryButton} onPress={handleAssign}>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleAssign}
+            >
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={20}
+                color="#fff"
+              />
               <Text style={styles.primaryButtonText}>Assign Ticket</Text>
             </TouchableOpacity>
           </View>
         )}
 
+        {ticket.status === 'Waiting for Confirmation' && (
+          <View style={styles.actionCard}>
+            <TouchableOpacity
+              style={styles.confirmButton}
+              onPress={handleConfirm}
+            >
+              <Ionicons
+                name="checkmark-done-outline"
+                size={20}
+                color="#fff"
+              />
+              <Text style={styles.confirmButtonText}>
+                Confirm & Close Ticket
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* -------- IN PROGRESS INFO BANNER -------- */}
         {ticket.status === 'In Progress' && (
           <View style={styles.infoBanner}>
-            <Ionicons name="information-circle-outline" size={24} color="#2E86DE" />
+            <Ionicons
+              name="information-circle-outline"
+              size={24}
+              color="#2E86DE"
+            />
             <View style={styles.infoBannerContent}>
-              <Text style={styles.infoBannerTitle}>Ticket In Progress</Text>
+              <Text style={styles.infoBannerTitle}>
+                Ticket In Progress
+              </Text>
               <Text style={styles.infoBannerText}>
-                This ticket is currently being worked on by {ticket.technician || 'the assigned technician'}. 
-                Please wait for the technician to mark it as completed.
+                This ticket is currently being worked on by{' '}
+                <Text style={{ fontWeight: '700' }}>
+                  {ticket.technician || 'the technician'}
+                </Text>
+                . Please wait for the technician to mark it as completed.
               </Text>
             </View>
           </View>
         )}
 
-        {ticket.status === 'Waiting for Confirmation' && (
-          <View style={styles.actionCard}>
-            <View style={styles.actionCardHeader}>
-              <Ionicons name="checkmark-circle-outline" size={24} color="#f59e0b" />
-              <Text style={styles.actionCardTitle}>Ready for Closure</Text>
-            </View>
-            <Text style={styles.actionCardDescription}>
-              The technician has marked this ticket as completed. Please review and confirm closure.
-            </Text>
-            {ticket.technician && (
-              <View style={styles.confirmationInfo}>
-                <Ionicons name="construct-outline" size={18} color="#666" />
-                <Text style={styles.confirmationInfoText}>
-                  Completed by {ticket.technician}
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-              <Ionicons name="checkmark-done-outline" size={20} color="#fff" />
-              <Text style={styles.confirmButtonText}>Confirm & Close Ticket</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
+        {/* -------- CLOSED SUCCESS BANNER -------- */}
         {ticket.status === 'Closed' && (
           <View style={styles.successBanner}>
-            <Ionicons name="checkmark-circle" size={24} color="#43A047" />
+            <Ionicons
+              name="checkmark-circle"
+              size={24}
+              color="#43A047"
+            />
             <View style={styles.infoBannerContent}>
-              <Text style={styles.successBannerTitle}>Ticket Closed</Text>
+              <Text style={styles.successBannerTitle}>
+                Ticket Closed
+              </Text>
               <Text style={styles.successBannerText}>
                 This ticket has been successfully closed.
               </Text>
             </View>
           </View>
         )}
+
       </ScrollView>
     </SafeAreaView>
   );

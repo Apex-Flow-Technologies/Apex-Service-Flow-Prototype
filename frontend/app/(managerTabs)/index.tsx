@@ -95,9 +95,11 @@ export default function ManagerHomeScreen() {
           (snap) => {
             const list = snap.docs.map((d) => {
               const data = d.data() as any;
-              // format ticketId: if numeric ticketId present use TCK-<num>, else derive short id
-              const ticketId = data.ticketId ? `TCK-${data.ticketId}` : `#${d.id.slice(0, 6)}`;
-              // get userName
+              // format ticketId
+              const ticketId = data.ticketId
+                ? `Ticket ID #${String(data.ticketId).padStart(4, '0')}`
+                : `Ticket ID #${d.id.slice(0, 4)}`;
+
               const userName = data.userName || data.customer || 'Unknown';
               // format date (YYYY-MM-DD) if Firestore timestamp present
               let date = 'N/A';
@@ -142,8 +144,7 @@ export default function ManagerHomeScreen() {
         console.error('subscribe recent open tickets failed', err);
         setLoadingRecent(false);
       }
-
-      // helper fallback - subscribe to counts by scanning tickets collection live
+//helper to subscribe counts live from tickets collection
       function subscribeCountsFromTickets() {
         try {
           const ticketsCol = collection(db, 'tickets');
@@ -199,7 +200,7 @@ export default function ManagerHomeScreen() {
     };
   }, []);
 
-  // Show spinner until counts are ready (you can adjust)
+//spinner while loading counts
   const countsReady = !loadingCounts && openCount !== null && inProgressCount !== null && completedCount !== null;
 
   return (
@@ -275,21 +276,25 @@ export default function ManagerHomeScreen() {
             <Text style={{ color: '#666' }}>No open tickets.</Text>
           ) : (
             recentOpenTickets.map((t) => (
-              <View key={t.id} style={styles.ticketCard}>
+              <TouchableOpacity
+                key={t.id}
+                style={styles.ticketCard}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/(managerTabs)/Ticket/${t.id}`)}
+>
                 <View style={styles.ticketCardHeader}>
-                  <Text style={styles.ticketId}>
-                    {t.ticketId} (from {t.userName})
-                  </Text>
-                  <Ionicons name="alert-circle-outline" size={18} color="#d32f2f" />
+                    <Text style={styles.ticketId}>
+                      {t.ticketId} (from {t.userName})
+                    </Text>
+                    <Ionicons name="alert-circle-outline" size={18} color="#d32f2f" />
                 </View>
 
-                <Text style={styles.ticketSubject}>{t.description}</Text>
-
-                <View style={styles.ticketCardFooter}>
-                  <Text style={styles.statusOpen}>Open</Text>
-                  <Text style={styles.ticketDate}>{t.date}</Text>
-                </View>
-              </View>
+                  <Text style={styles.ticketSubject}>{t.description}</Text>
+                  <View style={styles.ticketCardFooter}>
+                    <Text style={styles.statusOpen}>Open</Text>
+                    <Text style={styles.ticketDate}>{t.date}</Text>
+                  </View>
+              </TouchableOpacity>
             ))
           )}
         </View>

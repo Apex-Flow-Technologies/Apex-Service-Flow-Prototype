@@ -1,44 +1,70 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
-import { ALL_TICKETS, Ticket } from './data/tickets';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { Ticket, subscribeToTickets } from './data/tickets';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+
+/* ---------------- CONTEXT TYPE ---------------- */
 
 type TicketStore = {
   tickets: Ticket[];
   getTicket: (id: string) => Ticket | undefined;
-  assignTicket: (id: string, technician: string) => void;
-  confirmClosure: (id: string) => void;
+  assignTicket: (id: string, technician: string) => Promise<void>;
+  confirmClosure: (id: string) => Promise<void>;
 };
+
+/* ---------------- CONTEXT ---------------- */
 
 const TicketsContext = createContext<TicketStore | null>(null);
 
-export const TicketsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tickets, setTickets] = useState<Ticket[]>(ALL_TICKETS);
+/* ---------------- PROVIDER ---------------- */
 
-  const assignTicket = (id: string, technician: string) => {
-    setTickets((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: 'In Progress', technician } : t))
-    );
+export const TicketsProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToTickets(setTickets);
+    return () => unsub();
+  }, []);
+
+
+  const assignTicket = async (id: string, technician: string) => {
+    await updateDoc(doc(db, 'tickets', id), {
+      status: 'in progress',
+      assignedToName: technician,
+    });
   };
 
-  const confirmClosure = (id: string) => {
-    setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'Closed' } : t)));
+  const confirmClosure = async (id: string) => {
+    await updateDoc(doc(db, 'tickets', id), {
+      status: 'closed',
+    });
   };
 
-  const value = useMemo<TicketStore>(
+  const value = useMemo(
     () => ({
       tickets,
-      getTicket: (id) => tickets.find((t) => t.id === id),
+      getTicket: (id: string) => tickets.find(t => t.id === id),
       assignTicket,
       confirmClosure,
     }),
     [tickets]
   );
 
-  return <TicketsContext.Provider value={value}>{children}</TicketsContext.Provider>;
+  return (
+    <TicketsContext.Provider value={value}>
+      {children}
+    </TicketsContext.Provider>
+  );
 };
+
+/* ---------------- HOOK ---------------- */
 
 export const useTickets = () => {
   const ctx = useContext(TicketsContext);
-  if (!ctx) throw new Error('useTickets must be used within TicketsProvider');
+  if (!ctx) {
+    throw new Error('useTickets must be used inside TicketsProvider');
+  }
   return ctx;
 };
-

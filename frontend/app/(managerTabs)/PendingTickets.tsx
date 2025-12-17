@@ -1,42 +1,85 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ticket } from './data/tickets';
 import { useTickets } from './tickets-store';
+import { Ticket } from './data/tickets';
 
-const FILTER_TABS = ['New', 'In Progress', 'Closed'];
+const FILTER_TABS = ['New', 'In Progress', 'Closed'] as const;
 
-// Helper function to get status styles
-const getStatusStyles = (status: Ticket['status']) => {
-  if (status === 'New') {
-    return { text: styles.statusOpen, icon: 'alert-circle-outline', color: '#d32f2f' };
+
+const getStatusUI = (status: Ticket['status']) => {
+  switch (status) {
+    case 'New':
+      return {
+        label: 'open',
+        icon: 'alert-circle-outline',
+        color: '#d32f2f',
+        textStyle: styles.statusNew,
+      };
+    case 'In Progress':
+      return {
+        label: 'In Progress',
+        icon: 'sync-circle-outline',
+        color: '#2E86DE',
+        textStyle: styles.statusInProgress,
+      };
+      case 'Waiting for Confirmation':
+      return {
+        label: 'Waiting for Confirmation',
+        icon: 'sync-circle-outline',
+        color: '#2E86DE',
+        textStyle: styles.statusWaiting,
+      };
+    case 'Closed':
+      return {
+        label: 'Closed',
+        icon: 'checkmark-circle-outline',
+        color: '#43A047',
+        textStyle: styles.statusClosed,
+      };
+    default:
+      return {
+        label: status,
+        icon: 'help-circle-outline',
+        color: '#999',
+        textStyle: styles.statusClosed,
+      };
   }
-  if (status === 'In Progress') {
-    return { text: styles.statusInProgress, icon: 'sync-circle-outline', color: '#2E86DE' };
-  }
-  if (status === 'Waiting for Confirmation') {
-    return { text: styles.statusWaiting, icon: 'time-outline', color: '#f59e0b' };
-  }
-  return { text: styles.statusClosed, icon: 'checkmark-circle-outline', color: '#43A047' };
 };
 
-export default function TicketsScreen() {
+
+export default function PendingTickets() {
   const router = useRouter();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const { tickets } = useTickets();
-  const [activeTab, setActiveTab] = useState(
-    FILTER_TABS.includes(tab as string) ? (tab as string) : FILTER_TABS[0]
-  );
+
+  const [activeTab, setActiveTab] = useState<
+    typeof FILTER_TABS[number]
+  >(FILTER_TABS.includes(tab as any) ? (tab as any) : 'New');
+
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Filter by Active Tab
+
   const ticketsByTab = useMemo(() => {
     if (activeTab === 'New') {
       return tickets.filter(t => t.status === 'New');
     }
     if (activeTab === 'In Progress') {
-      return tickets.filter(t => t.status === 'In Progress' || t.status === 'Waiting for Confirmation');
+      return tickets.filter(
+        t =>
+          t.status === 'In Progress' ||
+          t.status === 'Waiting for Confirmation'
+      );
     }
     if (activeTab === 'Closed') {
       return tickets.filter(t => t.status === 'Closed');
@@ -44,18 +87,21 @@ export default function TicketsScreen() {
     return tickets;
   }, [activeTab, tickets]);
 
-  // 2. Filter by Search Query
+
   const filteredTickets = useMemo(() => {
-    if (!searchQuery) {
-      return ticketsByTab; // Return tab-filtered list if search is empty
-    }
-    return ticketsByTab.filter(
-      (ticket) =>
-        ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.id.toLowerCase().includes(searchQuery.toLowerCase())
+    if (!searchQuery.trim()) return ticketsByTab;
+
+    const q = searchQuery.toLowerCase();
+    return ticketsByTab.filter(t =>
+      `${t.ticketId} ${t.title} ${t.customer}`
+        .toLowerCase()
+        .includes(q)
     );
   }, [searchQuery, ticketsByTab]);
+
+  const isLoading = tickets.length === 0;
+
+  /* ---------------- UI ---------------- */
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -63,95 +109,115 @@ export default function TicketsScreen() {
         <Text style={styles.headerTitle}>All Tickets</Text>
       </View>
 
-      {/* --- RE-ORDERED THIS SECTION --- */}
-
-      {/* Search Bar (NOW FIRST) */}
       <View style={styles.searchContainer}>
         <View style={styles.searchWrapper}>
-          <Ionicons name="search-outline" size={20} color="#8A8A8A" style={styles.searchIcon} />
+          <Ionicons name="search-outline" size={20} color="#8A8A8A" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search by ID, title, or customer..."
-            placeholderTextColor="#8A8A8A"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
       </View>
 
-      {/* Filter Tabs (NOW SECOND) */}
       <View style={styles.filterContainer}>
-        {FILTER_TABS.map(tab => (
+        {FILTER_TABS.map(tabItem => (
           <TouchableOpacity
-            key={tab}
-            style={[styles.filterTab, activeTab === tab && styles.filterTabActive]}
-            onPress={() => setActiveTab(tab)}
+            key={tabItem}
+            style={[
+              styles.filterTab,
+              activeTab === tabItem && styles.filterTabActive,
+            ]}
+            onPress={() => setActiveTab(tabItem)}
           >
-            <Text style={[styles.filterText, activeTab === tab && styles.filterTextActive]}>{tab}</Text>
+            <Text
+              style={[
+                styles.filterText,
+                activeTab === tabItem && styles.filterTextActive,
+              ]}
+            >
+              {tabItem}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
-      
-      {/* --- END RE-ORDERED SECTION --- */}
 
-
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        
-        {/* Ticket List */}
-        {filteredTickets.map(ticket => {
-          const status = getStatusStyles(ticket.status);
-          return (
-            <TouchableOpacity 
-              key={ticket.id} 
-              style={styles.ticketCard}
-              onPress={() => {
-                // Navigate to ticket detail page
-                router.push(`/(managerTabs)/Ticket/${ticket.id}` as any);
-              }}
-            >
-              <View style={styles.ticketCardHeader}>
-                <Text style={styles.ticketId}>{ticket.id} (from {ticket.customer})</Text>
-                <Ionicons name={status.icon as any} size={18} color={status.color} />
-              </View>
-              <Text style={styles.ticketSubject}>{ticket.title}</Text>
-              {ticket.technician && (
-                <View style={styles.technicianBadge}>
-                  <Ionicons name="construct-outline" size={14} color="#666" />
-                  <Text style={styles.technicianText}>{ticket.technician}</Text>
-                </View>
-              )}
-              <View style={styles.ticketCardFooter}>
-                <Text style={status.text}>{ticket.status}</Text>
-                <Text style={styles.ticketDate}>{ticket.date}</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Show a message if no tickets are found */}
-        {filteredTickets.length === 0 && (
+      <ScrollView contentContainerStyle={styles.content}>
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#2E86DE" />
+        ) : filteredTickets.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No tickets found.</Text>
+            <Text style={styles.emptyText}>No tickets found</Text>
           </View>
-        )}
+        ) : (
+          filteredTickets.map(ticket => {
+            const statusUI = getStatusUI(ticket.status);
+            
 
-        {/* Spacer for tab bar */}
-        <View style={{ height: 60 }} />
+            return (
+              <TouchableOpacity
+                key={ticket.id}
+                style={styles.ticketCard}
+                onPress={() =>
+                  router.push(`/(managerTabs)/Ticket/${ticket.id}`)
+                }
+              >
+                <View style={styles.ticketCardHeader}>
+                  <Text style={styles.ticketId}>
+                    {ticket.ticketId} (from {ticket.customer})
+                  </Text>
+
+
+                  <Ionicons
+                    name={statusUI.icon as any}
+                    size={18}
+                    color={statusUI.color}
+                  />
+                </View>
+
+                <Text style={styles.ticketSubject}>{ticket.title}</Text>
+
+                {/* Technician name (In Progress & Closed) */}
+                {ticket.technician && (
+                  <View style={styles.techBadge}>
+                    <Ionicons
+                      name="construct-outline"
+                      size={14}
+                      color="#6B7280"
+                    />
+                    <Text style={styles.techName}>{ticket.technician}</Text>
+                  </View>
+                )}
+
+                <View style={styles.ticketCardFooter}>
+                  <Text style={statusUI.textStyle}>
+                    {statusUI.label}
+                  </Text>
+                  <Text style={styles.ticketDate}>{ticket.date}</Text>
+                </View>
+
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-// Styles
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#E8ECF5',
   },
+
   headerContainer: {
     backgroundColor: '#fff',
     paddingTop: 50,
-    paddingBottom: 16, 
+    paddingBottom: 16,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#DADADA',
@@ -162,48 +228,11 @@ const styles = StyleSheet.create({
     color: '#212121',
     textAlign: 'center',
   },
-  container: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 18, 
-  },
-  // Filter Tab Styles
-  filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    paddingHorizontal: 18,
-    paddingBottom: 16,
-    // This container now needs the border
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0'
-  },
-  filterTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: '#F0F0F0',
-  },
-  filterTabActive: {
-    backgroundColor: '#2E86DE',
-  },
-  filterText: {
-    color: '#616161',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  filterTextActive: {
-    color: '#fff',
-  },
-  // Search Bar Styles
+
   searchContainer: {
     paddingHorizontal: 18,
-    paddingTop: 16, // Added padding top
+    paddingVertical: 16,
     backgroundColor: '#fff',
-    paddingBottom: 16,
-    // Removed border from here
   },
   searchWrapper: {
     flexDirection: 'row',
@@ -212,33 +241,74 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
   searchInput: {
     flex: 1,
     height: 48,
     fontSize: 15,
+    marginLeft: 8,
     color: '#212121',
   },
-  // Ticket Card Styles (from Home screen)
+
+  filterContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#fff',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  filterTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+  },
+  filterTabActive: {
+    backgroundColor: '#2E86DE',
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#616161',
+  },
+  filterTextActive: {
+    color: '#fff',
+  },
+
+  content: {
+    padding: 18,
+  },
+  techBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  alignSelf: 'flex-start',
+  backgroundColor: '#F1F3F5',   // faint grey
+  borderRadius: 14,
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+  marginBottom: 6,
+},
+
+techName: {
+  marginLeft: 6,
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#6B7280',
+},
+
+
+
   ticketCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
     borderWidth: 1,
     borderColor: '#F0F0F0',
   },
   ticketCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
     alignItems: 'center',
   },
   ticketId: {
@@ -252,34 +322,18 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     color: '#252525',
   },
-  technicianBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F4F8',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
-    gap: 6,
-  },
-  technicianText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-  },
   ticketCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   ticketDate: {
-    color: '#B0B0B0',
     fontSize: 12,
+    color: '#B0B0B0',
     fontWeight: '500',
   },
-  // Status text styles
-  statusOpen: {
+
+  statusNew: {
     color: '#d32f2f',
     fontWeight: '700',
     fontSize: 13,
@@ -290,22 +344,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   statusWaiting: {
-    color: '#f59e0b',
-    fontWeight: '700',
-    fontSize: 13,
+   color: '#f59e0b',
+   fontWeight: '700',
+   fontSize: 13,
   },
+
   statusClosed: {
     color: '#43A047',
     fontWeight: '700',
     fontSize: 13,
   },
-  // Empty State Styles
+
   emptyContainer: {
     marginTop: 40,
     alignItems: 'center',
   },
   emptyText: {
     fontSize: 16,
-    color: '#8A8A8a',
+    color: '#8A8A8A',
   },
 });

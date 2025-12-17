@@ -112,10 +112,10 @@ export default function TechnicianHomeScreen() {
         <View style={styles.ticketsContainer}>
           {/* Section header */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Schedule</Text>
-            <TouchableOpacity onPress={() => router.push('/(technicianTabs)/AssingedTickets')}>
-              <Text style={styles.viewAllText}>View Map →</Text>
-            </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Today's Schedule</Text>
+          <TouchableOpacity onPress={() => router.push('/(technicianTabs)/AssingedTickets')}>
+            <Text style={styles.viewAllText}>View Tickets →</Text>
+          </TouchableOpacity>
           </View>
 
           {/* Map over the technician's schedule */}

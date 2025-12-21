@@ -1,25 +1,24 @@
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
 
-
 export type TicketStatus =
   | 'New'
+  | 'Assigned'
   | 'In Progress'
   | 'Waiting for Confirmation'
   | 'Closed';
 
-
 export type Ticket = {
-  id: string;               // Firestore document ID
-  ticketId: string;         // Formatted Ticket ID
+  id: string;
+  ticketId: string;
   title: string;
   description: string;
   customer: string;
   date: string;
   status: TicketStatus;
 
-  technician?: string;      // UI display name (assignedToName)
-  assignedToId?: string;    // ✅ FIX: username (REAL identity)
+  technician?: string;
+  assignedToId?: string;
 };
 
 const formatTicketId = (id: number | string | undefined) => {
@@ -28,20 +27,32 @@ const formatTicketId = (id: number | string | undefined) => {
 };
 
 const normalizeStatus = (rawStatus: string): TicketStatus => {
-  switch (rawStatus) {
+  if (!rawStatus) return 'New';
+
+  const status = rawStatus.toLowerCase().trim();
+
+  switch (status) {
     case 'open':
       return 'New';
+
+    case 'assigned':
+      return 'Assigned';
+
     case 'in progress':
+    case 'in_progress':
       return 'In Progress';
+
+    case 'waiting for confirmation':
     case 'waiting_for_confirmation':
       return 'Waiting for Confirmation';
+
     case 'closed':
       return 'Closed';
+
     default:
       return 'New';
   }
 };
-
 
 export const subscribeToTickets = (
   setTickets: (tickets: Ticket[]) => void
@@ -53,7 +64,7 @@ export const subscribeToTickets = (
       const data: any = doc.data();
 
       return {
-        id: doc.id, // Firestore slug ID
+        id: doc.id,
         ticketId: formatTicketId(data.ticketId),
         description: data.description ?? '',
         title: data.description
@@ -65,8 +76,8 @@ export const subscribeToTickets = (
           : 'N/A',
         status: normalizeStatus(data.status),
 
-        technician: data.assignedToName ?? undefined, // UI only
-        assignedToId: data.assignedToId ?? undefined, // ✅ FIX
+        technician: data.assignedToName ?? undefined,
+        assignedToId: data.assignedToId ?? undefined,
       };
     });
 

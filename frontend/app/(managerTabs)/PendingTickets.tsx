@@ -14,8 +14,10 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTickets } from './tickets-store';
 import { Ticket } from './data/tickets';
 
+/* 🔒 NO ASSIGNED TAB */
 const FILTER_TABS = ['New', 'In Progress', 'Closed'] as const;
 
+/* ---------------- STATUS UI ---------------- */
 
 const getStatusUI = (status: Ticket['status']) => {
   switch (status) {
@@ -26,6 +28,15 @@ const getStatusUI = (status: Ticket['status']) => {
         color: '#d32f2f',
         textStyle: styles.statusNew,
       };
+
+    case 'Assigned':
+      return {
+        label: 'Assigned',
+        icon: 'person-add-outline',
+        color: '#7b1fa2',
+        textStyle: styles.statusAssigned,
+      };
+
     case 'In Progress':
       return {
         label: 'In Progress',
@@ -33,13 +44,15 @@ const getStatusUI = (status: Ticket['status']) => {
         color: '#2E86DE',
         textStyle: styles.statusInProgress,
       };
-      case 'Waiting for Confirmation':
+
+    case 'Waiting for Confirmation':
       return {
         label: 'Waiting for Confirmation',
-        icon: 'sync-circle-outline',
-        color: '#2E86DE',
+        icon: 'time-outline',
+        color: '#f59e0b',
         textStyle: styles.statusWaiting,
       };
+
     case 'Closed':
       return {
         label: 'Closed',
@@ -47,6 +60,7 @@ const getStatusUI = (status: Ticket['status']) => {
         color: '#43A047',
         textStyle: styles.statusClosed,
       };
+
     default:
       return {
         label: status,
@@ -56,7 +70,6 @@ const getStatusUI = (status: Ticket['status']) => {
       };
   }
 };
-
 
 export default function PendingTickets() {
   const router = useRouter();
@@ -69,11 +82,15 @@ export default function PendingTickets() {
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  /* ---------------- FIXED TAB FILTERING ---------------- */
 
   const ticketsByTab = useMemo(() => {
     if (activeTab === 'New') {
-      return tickets.filter(t => t.status === 'New');
+      return tickets.filter(
+        t => t.status === 'New' || t.status === 'Assigned'
+      );
     }
+
     if (activeTab === 'In Progress') {
       return tickets.filter(
         t =>
@@ -81,12 +98,13 @@ export default function PendingTickets() {
           t.status === 'Waiting for Confirmation'
       );
     }
+
     if (activeTab === 'Closed') {
       return tickets.filter(t => t.status === 'Closed');
     }
+
     return tickets;
   }, [activeTab, tickets]);
-
 
   const filteredTickets = useMemo(() => {
     if (!searchQuery.trim()) return ticketsByTab;
@@ -153,7 +171,6 @@ export default function PendingTickets() {
         ) : (
           filteredTickets.map(ticket => {
             const statusUI = getStatusUI(ticket.status);
-            
 
             return (
               <TouchableOpacity
@@ -168,7 +185,6 @@ export default function PendingTickets() {
                     {ticket.ticketId} (from {ticket.customer})
                   </Text>
 
-
                   <Ionicons
                     name={statusUI.icon as any}
                     size={18}
@@ -178,7 +194,6 @@ export default function PendingTickets() {
 
                 <Text style={styles.ticketSubject}>{ticket.title}</Text>
 
-                {/* Technician name (In Progress & Closed) */}
                 {ticket.technician && (
                   <View style={styles.techBadge}>
                     <Ionicons
@@ -196,7 +211,6 @@ export default function PendingTickets() {
                   </Text>
                   <Text style={styles.ticketDate}>{ticket.date}</Text>
                 </View>
-
               </TouchableOpacity>
             );
           })
@@ -213,7 +227,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#E8ECF5',
   },
-
   headerContainer: {
     backgroundColor: '#fff',
     paddingTop: 50,
@@ -228,7 +241,6 @@ const styles = StyleSheet.create({
     color: '#212121',
     textAlign: 'center',
   },
-
   searchContainer: {
     paddingHorizontal: 18,
     paddingVertical: 16,
@@ -248,7 +260,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: '#212121',
   },
-
   filterContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -274,30 +285,25 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#fff',
   },
-
   content: {
     padding: 18,
   },
   techBadge: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  alignSelf: 'flex-start',
-  backgroundColor: '#F1F3F5',   // faint grey
-  borderRadius: 14,
-  paddingHorizontal: 10,
-  paddingVertical: 4,
-  marginBottom: 6,
-},
-
-techName: {
-  marginLeft: 6,
-  fontSize: 13,
-  fontWeight: '600',
-  color: '#6B7280',
-},
-
-
-
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#F1F3F5',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 6,
+  },
+  techName: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
   ticketCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -332,9 +338,13 @@ techName: {
     color: '#B0B0B0',
     fontWeight: '500',
   },
-
   statusNew: {
     color: '#d32f2f',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  statusAssigned: {
+    color: '#7b1fa2',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -344,17 +354,15 @@ techName: {
     fontSize: 13,
   },
   statusWaiting: {
-   color: '#f59e0b',
-   fontWeight: '700',
-   fontSize: 13,
+    color: '#f59e0b',
+    fontWeight: '700',
+    fontSize: 13,
   },
-
   statusClosed: {
     color: '#43A047',
     fontWeight: '700',
     fontSize: 13,
   },
-
   emptyContainer: {
     marginTop: 40,
     alignItems: 'center',

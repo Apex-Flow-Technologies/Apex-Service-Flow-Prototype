@@ -1,167 +1,284 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView, Switch } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  Switch,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from '../../firebaseConfig';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 
-// Static demo content for the Technician
-const techProfileImage = 'https://randomuser.me/api/portraits/men/32.jpg';
+/* ---------------- TYPES ---------------- */
 
-// Demo data for Technician's specific assigned tickets
-const mySchedule = [
-  { id: 'TCK-1042', title: 'Printer not working', location: 'Block A, 2nd Floor', status: 'Assigned', time: '10:00 AM' },
-  { id: 'TCK-1041', title: 'Server Room AC Leak', location: 'Server Room B', status: 'In Progress', time: '11:30 AM' },
-  { id: 'TCK-1039', title: 'CCTV Adjustments', location: 'Main Gate', status: 'Resolved', time: '09:00 AM' }, // Resolved = Waiting for Manager Close
-];
+interface Ticket {
+  id: string;
+  ticketId: number;
+  description: string;
+  status: string;
+  createdAt?: any;
+}
 
-// Helper function to get status styles specific to Technician workflow
-const getStatusStyles = (status : string) => {
-  if (status === 'Assigned') {
-    return { text: styles.statusAssigned, icon: 'alert-circle-outline', color: '#F57C00', label: 'New Task' };
+/* ---------------- HELPERS ---------------- */
+
+const formatTicketId = (num?: number) =>
+  num ? `#${String(num).padStart(4, '0')}` : '#0000';
+
+const getStatusStyles = (status: string) => {
+  if (status === 'assigned') {
+    return {
+      text: styles.statusAssigned,
+      icon: 'alert-circle-outline',
+      color: '#F57C00',
+      label: 'New Task',
+    };
   }
-  if (status === 'In Progress') {
-    return { text: styles.statusInProgress, icon: 'hammer-outline', color: '#2E86DE', label: 'Working' };
+
+  if (status === 'waiting_for_confirmation') {
+    return {
+      text: styles.statusResolved,
+      icon: 'hourglass-outline',
+      color: '#43A047',
+      label: 'Pending Approval',
+    };
   }
-  // 'Resolved' implies waiting for Manager approval
-  return { text: styles.statusResolved, icon: 'checkmark-circle-outline', color: '#43A047', label: 'Pending Approval' };
+
+  // Anything else should NOT be shown on this page
+  return null;
 };
+
+
+/* ---------------- COMPONENT ---------------- */
 
 export default function TechnicianHomeScreen() {
   const router = useRouter();
-  const [isAvailable, setIsAvailable] = useState(true); // Toggle for On Duty/Off Duty
+
+  const [isAvailable, setIsAvailable] = useState(true); 
+  const [loading, setLoading] = useState(true);
+
+  const [assignedCount, setAssignedCount] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+
+  const [recentTickets, setRecentTickets] = useState<Ticket[]>([]);
+  const [technicianName, setTechnicianName] = useState('Technician');
+
+  /* ---------------- FETCH DATA ---------------- */
+
+  useEffect(() => {
+    let unsubscribe: any;
+
+    const setupListener = async () => {
+      const userStr = await AsyncStorage.getItem('currentUser');
+      if (!userStr) return;
+
+      const user = JSON.parse(userStr);
+      setTechnicianName(user.name || user.username);
+
+      const q = query(
+        collection(db, 'tickets'),
+        where('assignedToId', '==', user.username),
+        orderBy('createdAt', 'desc')
+      );
+
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        let assigned = 0;
+        let active = 0;
+        let review = 0;
+        const list: Ticket[] = [];
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const status = (data.status || '').toLowerCase();
+
+          if (status === 'assigned') assigned++;
+          else if (status === 'in progress') active++;
+          else if (status === 'waiting_for_confirmation') review++;
+
+          if (list.length < 3) {
+            list.push({
+              id: docSnap.id,
+              ticketId: data.ticketId,
+              description: data.description || 'No description',
+              status,
+              createdAt: data.createdAt,
+            });
+          }
+        });
+
+        setAssignedCount(assigned);
+        setActiveCount(active);
+        setReviewCount(review);
+        setRecentTickets(list);
+        setLoading(false);
+      });
+    };
+
+    setupListener();
+    return () => unsubscribe && unsubscribe();
+  }, []);
+
+  /* ---------------- LOADING ---------------- */
+
+  if (loading) {
+    return (
+      <View style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#2E86DE" />
+        <Text style={{ marginTop: 10, color: '#666' }}>Loading tasks...</Text>
+      </View>
+    );
+  }
+
+  /* ---------------- UI (UNCHANGED) ---------------- */
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        
-        {/* Profile & Availability Container */}
+
+        {/* Profile */}
         <View style={styles.profileContainer}>
           <View style={styles.profileRow}>
             <View style={styles.profilePicWrapper}>
-              <Image source={{ uri: techProfileImage }} style={styles.profilePic} />
-              <View style={[styles.badge, { backgroundColor: isAvailable ? '#43A047' : '#B0BEC5' }]}>
-                {/* Green dot for online, Gray for offline */}
+              <View style={styles.profilePic}>
+                <Text style={styles.avatarText}>
+                  {technicianName.charAt(0).toUpperCase()}
+                </Text>
               </View>
+              <View style={[styles.badge, { backgroundColor: isAvailable ? '#43A047' : '#B0BEC5' }]} />
             </View>
+
             <View style={{ flex: 1 }}>
-              <Text style={styles.userName}>Hello, Alex</Text>
+              <Text style={styles.userName}>Hello, {technicianName}</Text>
               <Text style={styles.memberSince}>Technician Portal</Text>
             </View>
-            {/* Availability Toggle */}
+
+            {/* Toggle untouched */}
             <View style={styles.availabilityWrapper}>
-                <Text style={styles.availabilityText}>{isAvailable ? 'On Duty' : 'Off Duty'}</Text>
-                <Switch
-                    trackColor={{ false: "#767577", true: "#81b0ff" }}
-                    thumbColor={isAvailable ? "#2E86DE" : "#f4f3f4"}
-                    ios_backgroundColor="#3e3e3e"
-                    onValueChange={() => setIsAvailable(previousState => !previousState)}
-                    value={isAvailable}
-                    style={{ transform: [{ scaleX: .8 }, { scaleY: .8 }] }}
-                />
+              <Text style={styles.availabilityText}>{isAvailable ? 'On Duty' : 'Off Duty'}</Text>
+              <Switch
+                value={isAvailable}
+                onValueChange={() => setIsAvailable(v => !v)}
+              />
             </View>
           </View>
 
-          {/* Stats Section - Adapted for Technician Workflow */}
+          {/* Stats */}
           <View style={styles.statsRow}>
-            {/* Assigned / To Do */}
             <TouchableOpacity style={[styles.statCard, styles.statCardAssigned]}>
               <Ionicons name="clipboard-outline" size={20} color="#E65100" />
-              <Text style={styles.statNumber}>2</Text>
+              <Text style={styles.statNumber}>{assignedCount}</Text>
               <Text style={styles.statLabel}>Assigned</Text>
             </TouchableOpacity>
 
-            {/* In Progress */}
             <TouchableOpacity style={[styles.statCard, styles.statCardProgress]}>
               <Ionicons name="construct-outline" size={20} color="#1565C0" />
-              <Text style={styles.statNumber}>1</Text>
+              <Text style={styles.statNumber}>{activeCount}</Text>
               <Text style={styles.statLabel}>Active</Text>
             </TouchableOpacity>
 
-            {/* Waiting for Manager Approval */}
             <TouchableOpacity style={[styles.statCard, styles.statCardCompleted]}>
               <Ionicons name="hourglass-outline" size={20} color="#2E7D32" />
-              <Text style={styles.statNumber}>5</Text>
+              <Text style={styles.statNumber}>{reviewCount}</Text>
               <Text style={styles.statLabel}>Reviewing</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Quick Actions Container */}
+        {/* Work actions untouched */}
         <View style={styles.quickActionsContainer}>
           <Text style={styles.sectionTitle}>Work Actions</Text>
           <View style={styles.actionsRow}>
-            <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => router.push('/(technicianTabs)/AssingedTickets')}
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => router.push('/(technicianTabs)/AssingedTickets')}
             >
               <Ionicons name="list" size={22} color="#fff" />
               <Text style={styles.actionButtonText}>My Tasks</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonSecondary]}
-              // CORRECT
-            onPress={() => router.push('/(technicianTabs)/CompletedJobs')}
+              onPress={() => router.push('/(technicianTabs)/CompletedJobs')}
             >
               <Ionicons name="time-outline" size={22} color="#2E86DE" />
-              <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>History</Text>
+              <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>
+                History
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Schedule / Tickets Container */}
+        {/* Recent tickets */}
         <View style={styles.ticketsContainer}>
-          {/* Section header */}
           <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Today's Schedule</Text>
-          <TouchableOpacity onPress={() => router.push('/(technicianTabs)/AssingedTickets')}>
-            <Text style={styles.viewAllText}>View Tickets →</Text>
-          </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Today's Schedule</Text>
+            <TouchableOpacity onPress={() => router.push('/(technicianTabs)/AssingedTickets')}>
+              <Text style={styles.viewAllText}>View Tickets →</Text>
+            </TouchableOpacity>
           </View>
+           
 
-          {/* Map over the technician's schedule */}
-          {mySchedule.map((ticket) => {
-            const statusStyle = getStatusStyles(ticket.status);
+          {recentTickets.map((t) => {
+            const s = getStatusStyles(t.status);
+
+            // 🚫 Skip tickets that are not assigned / waiting_for_confirmation
+            if (!s) return null;
+
             return (
-              <View key={ticket.id} style={styles.ticketCard}>
+              <View key={t.id} style={styles.ticketCard}>
                 <View style={styles.ticketCardHeader}>
-                  <Text style={styles.ticketId}>{ticket.id}</Text>
-                  <View style={{flexDirection:'row', alignItems:'center'}}>
-                     <Ionicons Name={statusStyle.icon} size={16} color={statusStyle.color} style={{marginRight:4}} />
-                     <Text style={[statusStyle.text, {fontSize: 12}]}>{statusStyle.label}</Text>
-                  </View>
-                </View>
-                
-                <Text style={styles.ticketSubject}>{ticket.title}</Text>
-                
-                <View style={styles.locationRow}>
-                     <Ionicons name="location-sharp" size={14} color="#757575" />
-                     <Text style={styles.locationText}>{ticket.location}</Text>
+                  <Text style={styles.ticketId}>
+                    Ticket ID {formatTicketId(t.ticketId)}
+                  </Text>
+                  <Text style={s.text}>{s.label}</Text>
                 </View>
 
+                <Text style={styles.ticketSubject}>{t.description}</Text>
+
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-sharp" size={14} color="#757575" />
+                  <Text style={styles.locationText}>xxxx</Text>
+                </View>
                 <View style={styles.ticketCardFooter}>
-                <TouchableOpacity 
-                  style={styles.openButton} 
-                  onPress={() => router.push({
-                    pathname: '/ticket-detail/[id]', // Explicitly points to the file
-                    params: { id: ticket.id }        // Passes the ID safely
-                  })}
-                >
-                  <Text style={styles.openButtonText}>Open Ticket</Text>
-                  <Ionicons name="arrow-forward" size={14} color="#2E86DE" />
-                </TouchableOpacity>
-                <Text style={styles.ticketDate}>{ticket.time}</Text>
-              </View>
+                  <TouchableOpacity
+                    style={styles.openButton}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/ticket-detail/[id]',
+                        params: { id: t.id }, // Firestore doc id
+                      })
+                    }
+                  >
+                    <Text style={styles.openButtonText}>Open Ticket</Text>
+                    <Ionicons name="arrow-forward" size={14} color="#2E86DE" />
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })}
+
         </View>
 
-        {/* Spacer for tab bar */}
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 
 // Adapted Styles
 const styles = StyleSheet.create({
@@ -226,6 +343,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '600',
   },
+  avatarText: { color: '#fff', fontWeight: '800', fontSize: 20 },
   // Availability Toggle Styles
   availabilityWrapper: {
     alignItems: 'flex-end',

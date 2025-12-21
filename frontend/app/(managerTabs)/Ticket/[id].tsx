@@ -18,9 +18,11 @@ import { fetchTechnicians, Technician } from '../data/technicians';
 
 export const href = null;
 
+/* ---------------- STATUS MAPS (FIXED) ---------------- */
 
 const statusColor: Record<Ticket['status'], string> = {
   New: '#d32f2f',
+  Assigned: '#7b1fa2',
   'In Progress': '#2E86DE',
   'Waiting for Confirmation': '#f59e0b',
   Closed: '#43A047',
@@ -28,11 +30,13 @@ const statusColor: Record<Ticket['status'], string> = {
 
 const statusIcon: Record<Ticket['status'], string> = {
   New: 'alert-circle',
+  Assigned: 'person-add',
   'In Progress': 'sync',
   'Waiting for Confirmation': 'time',
   Closed: 'checkmark-circle',
 };
 
+/* ---------------------------------------------------- */
 
 export default function ManagerTicketDetails() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -55,7 +59,6 @@ export default function ManagerTicketDetails() {
   useEffect(() => {
     fetchTechnicians()
       .then(list => {
-        // safety: only valid names
         setTechnicians(list.filter(t => t?.name));
       })
       .catch(err => console.error('Failed to fetch technicians', err));
@@ -91,7 +94,7 @@ export default function ManagerTicketDetails() {
       return;
     }
 
-    // ONLY technician name (2 args) 
+    // ✅ Assign ONLY (do NOT move to In Progress)
     assignTicket(ticket.id, {
       username: selectedTechnician.username,
       name: selectedTechnician.name,
@@ -99,12 +102,12 @@ export default function ManagerTicketDetails() {
 
     Alert.alert(
       'Success',
-      `Ticket assigned to ${selectedTechnician.name}!\n\nMoved to "In Progress".`,
+      `Ticket assigned to ${selectedTechnician.name}!`,
       [
         {
           text: 'OK',
           onPress: () =>
-            router.replace('/(managerTabs)/PendingTickets?tab=In Progress'),
+            router.replace('/(managerTabs)/PendingTickets?tab=Assigned'),
         },
       ]
     );
@@ -126,6 +129,7 @@ export default function ManagerTicketDetails() {
       ]
     );
   };
+
 
 
   return (

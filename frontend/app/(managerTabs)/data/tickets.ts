@@ -10,14 +10,16 @@ export type TicketStatus =
 
 
 export type Ticket = {
-  id: string;              
-  ticketId: string;        
+  id: string;               // Firestore document ID
+  ticketId: string;         // Formatted Ticket ID
   title: string;
   description: string;
   customer: string;
   date: string;
   status: TicketStatus;
-  technician?: string;
+
+  technician?: string;      // UI display name (assignedToName)
+  assignedToId?: string;    // ✅ FIX: username (REAL identity)
 };
 
 const formatTicketId = (id: number | string | undefined) => {
@@ -52,7 +54,7 @@ export const subscribeToTickets = (
 
       return {
         id: doc.id, // Firestore slug ID
-        ticketId: formatTicketId(data.ticketId), 
+        ticketId: formatTicketId(data.ticketId),
         description: data.description ?? '',
         title: data.description
           ? data.description.split(' ').slice(0, 3).join(' ')
@@ -62,7 +64,9 @@ export const subscribeToTickets = (
           ? data.createdAt.toDate().toISOString().split('T')[0]
           : 'N/A',
         status: normalizeStatus(data.status),
-        technician: data.assignedToName ?? undefined,
+
+        technician: data.assignedToName ?? undefined, // UI only
+        assignedToId: data.assignedToId ?? undefined, // ✅ FIX
       };
     });
 

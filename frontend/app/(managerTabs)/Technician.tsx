@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
@@ -13,71 +12,103 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 
-// 1. DEFINE THE TECHNICIAN TYPE
+/* ---------------- TYPES ---------------- */
+
 interface Technician {
-  id: string;
+  username: string;        // UNIQUE ID
   name: string;
-  image: string;
-  activeTickets: number;
   specialty: string;
+  activeTickets: number;
 }
 
-// 2. APPLY THE TYPE TO THE INITIAL DATA
-const INITIAL_TECHNICIANS: Technician[] = [ // Note the: Technician[]
-  {
-    id: 'tech1',
-    name: 'Alice Smith',
-    image: 'https://randomuser.me/api/portraits/women/65.jpg',
-    activeTickets: 3,
-    specialty: 'Hardware & Printers',
-  },
-  {
-    id: 'tech2',
-    name: 'Bob Johnson',
-    image: 'https://randomuser.me/api/portraits/men/65.jpg',
-    activeTickets: 5,
-    specialty: 'Network & Servers',
-  },
-  {
-    id: 'tech3',
-    name: 'Charlie Lee',
-    image: 'https://randomuser.me/api/portraits/men/68.jpg',
-    activeTickets: 1,
-    specialty: 'Software & Accounts',
-  },
-  {
-    id: 'tech4',
-    name: 'David Kim',
-    image: 'https://randomuser.me/api/portraits/men/70.jpg',
-    activeTickets: 0,
-    specialty: 'Mobile Devices',
-  },
-];
+/* ---------------- COLOR UTILS ---------------- */
+
+// Stable color from username (same user → same color)
+const AVATAR_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+const getColorFromUsername = (username: string) => {
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+
+const getInitial = (name: string) =>
+  name?.charAt(0).toUpperCase() || '?';
+
+/* ---------------- SCREEN ---------------- */
 
 export default function TechniciansScreen() {
   const router = useRouter();
-  
-  // 3. APPLY THE TYPE TO THE STATE
-  const [technicians, setTechnicians] = useState<Technician[]>(INITIAL_TECHNICIANS); // Note the <Technician[]>
+
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [modalVisible, setModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSpecialty, setNewSpecialty] = useState('');
 
-  const filteredTechnicians = useMemo(() => {
-    const sourceList = technicians; 
+  /* ---------------- FETCH DATA (A1) ---------------- */
 
-    if (!searchQuery) {
-      return sourceList;
-    }
-    return sourceList.filter(
-      (tech) =>
-        tech.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tech.specialty.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    const fetchData = async () => {
+      // 1️⃣ Fetch technicians
+      const usersSnap = await getDocs(collection(db, 'user'));
+      const techs = usersSnap.docs
+        .map(doc => doc.data())
+        .filter(u => u.role === 'technician')
+        .map(u => ({
+          username: u.username,
+          name: u.name,
+          specialty: u.specialty ?? 'General',
+          activeTickets: 0,
+        }));
+
+      // 2️⃣ Fetch tickets ONCE
+      const ticketsSnap = await getDocs(collection(db, 'tickets'));
+      const activeTickets = ticketsSnap.docs
+        .map(doc => doc.data())
+        .filter(
+          t =>
+            t.assignedToId &&
+            (t.status === 'in progress' ||
+              t.status === 'waiting_for_confirmation')
+        );
+
+      // 3️⃣ Count active tickets per technician
+      const withCounts = techs.map(tech => ({
+        ...tech,
+        activeTickets: activeTickets.filter(
+          t => t.assignedToId === tech.username
+        ).length,
+      }));
+
+      setTechnicians(withCounts);
+    };
+
+    fetchData().catch(err =>
+      console.error('Failed to load technicians', err)
     );
-  }, [searchQuery, technicians]); 
+  }, []);
+
+  /* ---------------- SEARCH ---------------- */
+
+  const filteredTechnicians = useMemo(() => {
+    if (!searchQuery) return technicians;
+
+    const q = searchQuery.toLowerCase();
+    return technicians.filter(
+      tech =>
+        tech.name.toLowerCase().includes(q) ||
+        tech.specialty.toLowerCase().includes(q)
+    );
+  }, [searchQuery, technicians]);
+
+  /* ---------------- ADD / REMOVE (UI ONLY) ---------------- */
 
   const handleAddTechnician = () => {
     if (!newName || !newSpecialty) {
@@ -85,48 +116,31 @@ export default function TechniciansScreen() {
       return;
     }
 
-    // TypeScript knows this must be a Technician
-    const newTech: Technician = { 
-      id: `tech${Math.floor(Math.random() * 1000)}`,
-      name: newName,
-      specialty: newSpecialty,
-      image: `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 80)}.jpg`,
-      activeTickets: 0,
-    };
+    Alert.alert(
+      'Info',
+      'This screen is now read-only.\nTechnicians are managed from Firestore.'
+    );
 
-    setTechnicians([...technicians, newTech]);
     setModalVisible(false);
     setNewName('');
     setNewSpecialty('');
   };
 
-  // 4. THIS IS THE FIX FROM YOUR SCREENSHOT
-  // We tell the function that `tech` is of type `Technician`
-  const handleRemoveTechnician = (tech: Technician) => { 
+  const handleRemoveTechnician = (tech: Technician) => {
     Alert.alert(
       'Remove Technician',
       `Are you sure you want to remove ${tech.name}?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Remove',
-          onPress: () => {
-            setTechnicians(technicians.filter(t => t.id !== tech.id));
-          },
-          style: 'destructive',
-        },
-      ]
+      [{ text: 'OK' }]
     );
   };
-  
+
+  /* ---------------- UI ---------------- */
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Manage Technicians</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addButton}
           onPress={() => setModalVisible(true)}
         >
@@ -137,36 +151,63 @@ export default function TechniciansScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.searchContainer}>
           <View style={styles.searchWrapper}>
-            <Ionicons name="search-outline" size={20} color="#8A8A8A" style={styles.searchIcon} />
+            <Ionicons name="search-outline" size={20} color="#8A8A8A" />
             <TextInput
               style={styles.searchInput}
               placeholder="Search by name or specialty..."
-              placeholderTextColor="#8A8A8A"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
         </View>
 
-        {filteredTechnicians.map(tech => ( // tech is automatically typed as `Technician` here
-          <TouchableOpacity
-            key={tech.id}
-            style={styles.techCard}
-            onPress={() => router.push({ pathname: '/(managerTabs)/Technician', params: { id: tech.id } })}
-            onLongPress={() => handleRemoveTechnician(tech)} // This now works
-          >
-            <Image source={{ uri: tech.image }} style={styles.profilePic} />
-            <View style={styles.techInfo}>
-              <Text style={styles.techName}>{tech.name}</Text>
-              <Text style={styles.techSpecialty}>{tech.specialty}</Text>
-            </View>
-            <View style={styles.workloadContainer}>
-              <Text style={styles.workloadNumber}>{tech.activeTickets}</Text>
-              <Text style={styles.workloadLabel}>Active</Text>
-            </View>
-            <Ionicons name="chevron-forward-outline" size={22} color="#B0B0B0" />
-          </TouchableOpacity>
-        ))}
+        {filteredTechnicians.map(tech => {
+          const bgColor = getColorFromUsername(tech.username);
+
+          return (
+            <TouchableOpacity
+              key={tech.username}
+              style={styles.techCard}
+              onPress={() =>
+                router.push({
+                  pathname: '/(managerTabs)/Technician',
+                  params: { id: tech.username },
+                })
+              }
+              onLongPress={() => handleRemoveTechnician(tech)}
+            >
+              {/* -------- LETTER AVATAR -------- */}
+              <View
+                style={[
+                  styles.avatar,
+                  { backgroundColor: bgColor },
+                ]}
+              >
+                <Text style={styles.avatarText}>
+                  {getInitial(tech.name)}
+                </Text>
+              </View>
+
+              <View style={styles.techInfo}>
+                <Text style={styles.techName}>{tech.name}</Text>
+                <Text style={styles.techSpecialty}>{tech.specialty}</Text>
+              </View>
+
+              <View style={styles.workloadContainer}>
+                <Text style={styles.workloadNumber}>
+                  {tech.activeTickets}
+                </Text>
+                <Text style={styles.workloadLabel}>Active</Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward-outline"
+                size={22}
+                color="#B0B0B0"
+              />
+            </TouchableOpacity>
+          );
+        })}
 
         {filteredTechnicians.length === 0 && (
           <View style={styles.emptyContainer}>
@@ -177,14 +218,8 @@ export default function TechniciansScreen() {
         <View style={{ height: 60 }} />
       </ScrollView>
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => {
-          setModalVisible(!modalVisible);
-        }}
-      >
+      {/* -------- MODAL (UNCHANGED UI) -------- */}
+      <Modal transparent visible={modalVisible} animationType="slide">
         <View style={styles.modalCenteredView}>
           <View style={styles.modalView}>
             <Text style={styles.modalTitle}>Add New Technician</Text>
@@ -192,14 +227,12 @@ export default function TechniciansScreen() {
             <TextInput
               style={styles.modalInput}
               placeholder="Full Name"
-              placeholderTextColor="#8A8A8A"
               value={newName}
               onChangeText={setNewName}
             />
             <TextInput
               style={styles.modalInput}
-              placeholder="Specialty (e.g., Hardware)"
-              placeholderTextColor="#8A8A8A"
+              placeholder="Specialty"
               value={newSpecialty}
               onChangeText={setNewSpecialty}
             />
@@ -225,11 +258,11 @@ export default function TechniciansScreen() {
   );
 }
 
+/* ---------------- STYLES (UNCHANGED + AVATAR) ---------------- */
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#E8ECF5',
-  },
+  safeArea: { flex: 1, backgroundColor: '#E8ECF5' },
+
   headerContainer: {
     backgroundColor: '#fff',
     paddingTop: 50,
@@ -237,7 +270,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#DADADA',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -245,44 +277,21 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: '#212121',
-    textAlign: 'center',
-    flex: 1,
   },
-  addButton: {
-    position: 'absolute',
-    right: 18,
-    top: 50,
-  },
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 18,
-  },
-  searchContainer: {
-    marginBottom: 18,
-  },
+  addButton: { position: 'absolute', right: 18, top: 50 },
+
+  container: { flex: 1 },
+  content: { padding: 18 },
+
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
     paddingHorizontal: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 48,
-    fontSize: 15,
-    color: '#212121',
-  },
+  searchInput: { flex: 1, height: 48 },
+
   techCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -290,39 +299,31 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  profilePic: {
+
+  avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    marginRight: 12,
-  },
-  techInfo: {
-    flex: 1,
-    marginRight: 10,
-  },
-  techName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#212121',
-  },
-  techSpecialty: {
-    fontSize: 13,
-    color: '#8A8A8A',
-    marginTop: 3,
-  },
-  workloadContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+
+  techInfo: { flex: 1 },
+  techName: { fontSize: 16, fontWeight: '600' },
+  techSpecialty: { fontSize: 13, color: '#8A8A8A' },
+
+  workloadContainer: {
+    alignItems: 'center',
     backgroundColor: '#E3F2FD',
     borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    padding: 8,
     marginRight: 10,
   },
   workloadNumber: {
@@ -330,84 +331,47 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2E86DE',
   },
-  workloadLabel: {
-    fontSize: 10,
-    color: '#1976D2',
-    fontWeight: '500',
-  },
-  emptyContainer: {
-    marginTop: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#8A8A8A',
-  },
+  workloadLabel: { fontSize: 10, color: '#1976D2' },
+
+  emptyContainer: { marginTop: 40, alignItems: 'center' },
+  emptyText: { fontSize: 16, color: '#8A8A8A' },
+
   modalCenteredView: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modalView: {
-    width: '90%',
     margin: 20,
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 25,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 20,
-    color: '#212121',
-  },
+  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 20 },
+
   modalInput: {
-    width: '100%',
     height: 50,
     backgroundColor: '#F0F4F8',
     borderRadius: 10,
     paddingHorizontal: 15,
-    fontSize: 16,
     marginBottom: 15,
   },
-  modalButtonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 10,
-  },
-  modalButton: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 14,
-    marginHorizontal: 5,
-  },
-  modalButtonCancel: {
-    backgroundColor: '#F0F4F8',
-  },
-  modalButtonSave: {
-    backgroundColor: '#2E86DE',
-  },
+  modalButtonRow: { flexDirection: 'row' },
+  modalButton: { flex: 1, paddingVertical: 14, marginHorizontal: 5 },
+  modalButtonCancel: { backgroundColor: '#F0F4F8' },
+  modalButtonSave: { backgroundColor: '#2E86DE' },
   modalButtonTextCancel: {
     color: '#2E86DE',
-    fontWeight: '700',
     textAlign: 'center',
-    fontSize: 16,
+    fontWeight: '700',
   },
   modalButtonTextSave: {
     color: '#fff',
-    fontWeight: '700',
     textAlign: 'center',
-    fontSize: 16,
+    fontWeight: '700',
   },
+  searchContainer: {
+  marginBottom: 18,
+},
+
 });

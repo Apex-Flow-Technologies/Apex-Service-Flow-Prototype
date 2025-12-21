@@ -92,7 +92,10 @@ export default function ManagerTicketDetails() {
     }
 
     // ONLY technician name (2 args) 
-    assignTicket(ticket.id, selectedTechnician.name);
+    assignTicket(ticket.id, {
+      username: selectedTechnician.username,
+      name: selectedTechnician.name,
+    });
 
     Alert.alert(
       'Success',

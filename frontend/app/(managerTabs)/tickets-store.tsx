@@ -5,10 +5,18 @@ import { db } from '../../firebaseConfig';
 
 /* ---------------- CONTEXT TYPE ---------------- */
 
+type AssignedTechnician = {
+  username: string; // ✅ REAL identity
+  name: string;     // UI display
+};
+
 type TicketStore = {
   tickets: Ticket[];
   getTicket: (id: string) => Ticket | undefined;
-  assignTicket: (id: string, technician: string) => Promise<void>;
+
+  // ✅ FIX: accept technician object, not name string
+  assignTicket: (id: string, technician: AssignedTechnician) => Promise<void>;
+
   confirmClosure: (id: string) => Promise<void>;
 };
 
@@ -29,10 +37,15 @@ export const TicketsProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
 
-  const assignTicket = async (id: string, technician: string) => {
+  // ✅ FIXED: store BOTH id + name
+  const assignTicket = async (
+    id: string,
+    technician: AssignedTechnician
+  ) => {
     await updateDoc(doc(db, 'tickets', id), {
       status: 'in progress',
-      assignedToName: technician,
+      assignedToId: technician.username,   // ✅ SAFE
+      assignedToName: technician.name,     // UI only
     });
   };
 

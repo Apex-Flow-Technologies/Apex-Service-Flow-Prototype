@@ -287,6 +287,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 18,
+    paddingBottom: 80,
   },
   techBadge: {
     flexDirection: 'row',

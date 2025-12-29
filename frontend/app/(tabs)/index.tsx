@@ -26,6 +26,24 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
 
   const [recentTickets, setRecentTickets] = useState<RecentTicket[]>([]);
+  const normalizeStatus = (status: string) => {
+  const s = status.toLowerCase();
+
+  if (
+    s === 'in progress' ||
+    s === 'waiting_for_confirmation' ||
+    s === 'assigned' ||
+    s === 'declined'
+  ) {
+    return 'in progress';
+  }
+
+  if (s === 'closed') return 'closed';
+  if (s === 'open') return 'open';
+
+  return 'open'; // safe fallback
+};
+
 
 
 useEffect(() => {
@@ -43,9 +61,9 @@ useEffect(() => {
 
         snapshot.forEach((doc) => {
           const data = doc.data();
-          const status = (data.status || '').toLowerCase();
+          const status = normalizeStatus(data.status || '').toLowerCase();
           if (status === 'open') open++;
-          else if (status === 'in progress') progress++;
+          else if (status === 'in progress' || status === 'waiting_for_confirmation' || status === 'assigned' || status=== 'declined') progress++;
           else if (status === 'closed') closed++;
         });
 
@@ -96,7 +114,8 @@ useEffect(() => {
                 ? `#${String(data.ticketId).padStart(4, '0')}`
                 : `#${docSnap.id.slice(0, 6)}`,
               description: data.description || 'No details provided',
-              status: data.status || 'open',
+              status: normalizeStatus(data.status || 'open'),
+
               date: date
             };
           });

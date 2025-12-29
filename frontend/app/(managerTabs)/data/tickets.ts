@@ -1,11 +1,14 @@
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
 
+/* ---------------- TYPES ---------------- */
+
 export type TicketStatus =
   | 'New'
   | 'Assigned'
   | 'In Progress'
   | 'Waiting for Confirmation'
+  | 'declined'
   | 'Closed';
 
 export type Ticket = {
@@ -21,11 +24,16 @@ export type Ticket = {
   assignedToId?: string;
 };
 
+/* ---------------- HELPERS ---------------- */
+
 const formatTicketId = (id: number | string | undefined) => {
   if (id === undefined || id === null) return 'Ticket ID #0000';
   return `Ticket ID #${String(id).padStart(4, '0')}`;
 };
 
+/**
+ * Convert Firestore status → App-safe TicketStatus
+ */
 const normalizeStatus = (rawStatus: string): TicketStatus => {
   if (!rawStatus) return 'New';
 
@@ -46,6 +54,9 @@ const normalizeStatus = (rawStatus: string): TicketStatus => {
     case 'waiting_for_confirmation':
       return 'Waiting for Confirmation';
 
+    case 'declined':
+      return 'declined';
+
     case 'closed':
       return 'Closed';
 
@@ -53,6 +64,8 @@ const normalizeStatus = (rawStatus: string): TicketStatus => {
       return 'New';
   }
 };
+
+/* ---------------- SUBSCRIPTION ---------------- */
 
 export const subscribeToTickets = (
   setTickets: (tickets: Ticket[]) => void
@@ -74,6 +87,7 @@ export const subscribeToTickets = (
         date: data.createdAt?.toDate
           ? data.createdAt.toDate().toISOString().split('T')[0]
           : 'N/A',
+
         status: normalizeStatus(data.status),
 
         technician: data.assignedToName ?? undefined,

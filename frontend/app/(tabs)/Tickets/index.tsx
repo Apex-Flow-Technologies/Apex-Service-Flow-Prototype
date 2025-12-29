@@ -55,6 +55,25 @@ function TicketCard({ ticket, onView }: { ticket: Ticket; onView: (id: string) =
   );
 }
 
+const normalizeStatus = (status: string) => {
+  const s = status.toLowerCase();
+
+  if (
+    s === 'in progress' ||
+    s === 'waiting_for_confirmation' ||
+    s === 'assigned' ||
+    s === 'declined'
+  ) {
+    return 'in progress';
+  }
+
+  if (s === 'closed') return 'closed';
+  if (s === 'open') return 'open';
+
+  return 'open'; // safe fallback
+};
+
+
 export default function Tickets() {
   const [activeTab, setActiveTab] = useState<'completed' | 'onprogress'>('onprogress');
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -104,7 +123,7 @@ export default function Tickets() {
              })()
             : "Service Request",
           date: formattedDate,
-          status: data.status || 'open',
+          status: normalizeStatus(data.status || 'open'),
         });
       });
 

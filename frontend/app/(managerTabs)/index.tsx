@@ -74,7 +74,7 @@ export default function ManagerHomeScreen() {
         const ticketsCol = collection(db, 'tickets');
         let q;
         if (isManager) {
-          q = query(ticketsCol, where('status', '==', 'open'), orderBy('createdAt', 'desc'), limit(RECENT_LIMIT));
+          q = query(ticketsCol,where('status', 'in', ['open', 'declined']), orderBy('createdAt', 'desc'), limit(RECENT_LIMIT));
         } else {
           if (!user) {
             setRecentOpenTickets([]);
@@ -168,13 +168,18 @@ export default function ManagerHomeScreen() {
               let open = 0,
                 progress = 0,
                 closed = 0;
-              snap.forEach((doc) => {
-                const d = doc.data() as any;
-                const status = (d.status || '').toString().toLowerCase();
-                if (status === 'open') open++;
-                else if (status === 'in progress' || status === 'pending closure') progress++;
-                else if (status === 'closed') closed++;
-              });
+            snap.forEach((doc) => {
+              const d = doc.data() as any;
+              const status = (d.status || '').toString().toLowerCase();
+              if (status === 'open' || status === 'declined') {
+                open++;
+              } else if (status === 'in progress' || status === 'pending closure') {
+                progress++;
+              } else if (status === 'closed') {
+                closed++;
+              }
+            });
+
               setOpenCount(open);
               setInProgressCount(progress);
               setCompletedCount(closed);

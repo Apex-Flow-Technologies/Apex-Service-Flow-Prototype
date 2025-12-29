@@ -36,6 +36,14 @@ const getStatusUI = (status: Ticket['status']) => {
         color: '#7b1fa2',
         textStyle: styles.statusAssigned,
       };
+      case 'declined':
+        return {
+          label: 'Declined',
+          icon: 'close-circle-outline',
+          color: '#D32F2F',
+          textStyle: styles.statusNew, // reuse red style
+        };
+
 
     case 'In Progress':
       return {
@@ -87,7 +95,7 @@ export default function PendingTickets() {
   const ticketsByTab = useMemo(() => {
     if (activeTab === 'New') {
       return tickets.filter(
-        t => t.status === 'New' || t.status === 'Assigned'
+        t => t.status === 'New' || t.status === 'Assigned' ||t.status === 'declined'
       );
     }
 

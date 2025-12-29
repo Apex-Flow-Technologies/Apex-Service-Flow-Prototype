@@ -1,155 +1,264 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  SafeAreaView,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { db } from '../../firebaseConfig';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Mock Data: Mix of Resolved (Waiting) and Closed (Done)
-const historyData = [
-  { 
-    id: 'TCK-1039', 
-    title: 'CCTV Adjustments', 
-    customer: 'Main Gate Security', 
-    address: 'Gate 1, North Wing',
-    completedAt: 'Today, 09:00 AM',
-    status: 'Pending Approval', // Tech finished, Manager hasn't closed yet
-    resolution: 'Re-aligned camera angle and cleaned lens.'
-  },
-  { 
-    id: 'TCK-1035', 
-    title: 'Projector Bulb Replacement', 
-    customer: 'Conference Room A', 
-    address: '3rd Floor, Corporate Block',
-    completedAt: 'Yesterday, 04:30 PM',
-    status: 'Closed', // Manager Approved
-    resolution: 'Replaced bulb and tested HDMI input.'
-  },
-  { 
-    id: 'TCK-1022', 
-    title: 'Wifi Router Reset', 
-    customer: 'Finance Dept', 
-    address: '2nd Floor, Wing B',
-    completedAt: '05 Mar 2025',
-    status: 'Closed',
-    resolution: 'Firmware updated and restarted.'
-  },
-];
+/* ---------------------------------------------------- */
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter logic for search
-  const filteredData = historyData.filter(item => 
-    item.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.customer.toLowerCase().includes(searchQuery.toLowerCase())
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  /* ---------- HELPERS ---------- */
+
+  const formatTicketId = (id: number) =>
+    `Ticket ID #${String(id).padStart(4, '0')}`;
+
+  const getTitleFromDescription = (desc: string) =>
+    desc.split(' ').slice(0, 3).join(' ');
+
+  const getShortDescription = (desc: string) =>
+    desc.split(' ').slice(0, 8).join(' ') + '...';
+
+  const formatCompletedAt = (timestamp: any) => {
+    if (!timestamp?.toDate) return 'N/A';
+
+    const date = timestamp.toDate();
+    const now = new Date();
+
+    const isToday =
+      date.toDateString() === now.toDateString();
+
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+
+    const isYesterday =
+      date.toDateString() === yesterday.toDateString();
+
+    const time = date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    if (isToday) return `Today, ${time}`;
+    if (isYesterday) return `Yesterday, ${time}`;
+
+    return date.toLocaleDateString();
+  };
+
+  /* ---------- FETCH HISTORY ---------- */
+
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+
+    const fetchHistory = async () => {
+      const userStr = await AsyncStorage.getItem('currentUser');
+      const user = userStr ? JSON.parse(userStr) : null;
+
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+
+      const q = query(
+        collection(db, 'tickets'),
+        where('assignedToId', '==', user.username),
+        where('status', 'in', ['waiting_for_confirmation', 'closed']),
+        orderBy('completedAt', 'desc')
+      );
+
+      unsub = onSnapshot(q, snap => {
+        const list = snap.docs.map(doc => {
+          const d = doc.data() as any;
+
+          return {
+            id: doc.id,
+            ticketId: formatTicketId(d.ticketId),
+            title: getTitleFromDescription(d.description || ''),
+            location: 'xxx',
+            description: getShortDescription(d.description || ''),
+            completedAt: formatCompletedAt(d.completedAt),
+            rawStatus: d.status,
+          };
+        });
+
+        setHistoryData(list);
+        setLoading(false);
+      });
+    };
+
+    fetchHistory();
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
+  /* ---------- SEARCH ---------- */
+
+  const filteredData = historyData.filter(item =>
+    item.ticketId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const totalCompleted = historyData.filter(
+    t => t.rawStatus === 'closed'
+  ).length;
+
+  /* ---------- RENDER ITEM ---------- */
+
   const renderHistoryItem = ({ item }: { item: any }) => {
-    const isClosed = item.status === 'Closed';
+    const isClosed = item.rawStatus === 'closed';
 
     return (
-      <TouchableOpacity 
-        style={styles.card}
-        onPress={() => router.push({
-          pathname: '/ticket-detail/[id]',
-          params: { id: item.id }
-        })} 
-      >
+      <TouchableOpacity style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles.ticketId}>{item.id}</Text>
-          <View style={[styles.statusBadge, isClosed ? styles.statusClosed : styles.statusPending]}>
-            <Ionicons 
-              name={isClosed ? "checkmark-circle" : "hourglass"} 
-              size={12} 
-              color={isClosed ? "#2E7D32" : "#F57C00"} 
+          <Text style={styles.ticketId}>{item.ticketId}</Text>
+          <View
+            style={[
+              styles.statusBadge,
+              isClosed ? styles.statusClosed : styles.statusPending,
+            ]}
+          >
+            <Ionicons
+              name={isClosed ? 'checkmark-circle' : 'hourglass'}
+              size={12}
+              color={isClosed ? '#2E7D32' : '#F57C00'}
             />
-            <Text style={[styles.statusText, isClosed ? styles.textClosed : styles.textPending]}>
-              {item.status}
+            <Text
+              style={[
+                styles.statusText,
+                isClosed ? styles.textClosed : styles.textPending,
+              ]}
+            >
+              {isClosed ? 'Closed' : 'Pending Approval'}
             </Text>
           </View>
         </View>
 
         <Text style={styles.ticketTitle}>{item.title}</Text>
-        <Text style={styles.customerName}>{item.customer}</Text>
+        <Text style={styles.customerName}>{item.location}</Text>
 
         <View style={styles.resolutionContainer}>
-          <Ionicons name="checkbox-outline" size={16} color="#757575" style={{marginTop: 2}}/>
-          <Text style={styles.resolutionText} numberOfLines={2}>
-            {item.resolution}
+          <Ionicons
+            name="checkbox-outline"
+            size={16}
+            color="#757575"
+            style={{ marginTop: 2 }}
+          />
+          <Text style={styles.resolutionText}>
+            {item.description}
           </Text>
         </View>
 
         <View style={styles.divider} />
 
         <View style={styles.cardFooter}>
-          <Text style={styles.dateText}>Finished: {item.completedAt}</Text>
-          <Ionicons name="chevron-forward" size={18} color="#B0B0B0" />
+          <Text style={styles.dateText}>
+            Finished: {item.completedAt}
+          </Text>
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color="#B0B0B0"
+          />
         </View>
       </TouchableOpacity>
     );
   };
 
+  /* ---------- UI ---------- */
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        
-        {/* Header - MODIFIED */}
         <View style={styles.header}>
-            <Text style={styles.headerTitle}>Job History</Text>
-            <Text style={styles.headerSubtitle}>Total Completed: {historyData.length}</Text>
+          <Text style={styles.headerTitle}>Job History</Text>
+          <Text style={styles.headerSubtitle}>
+            Total Completed: {totalCompleted}
+          </Text>
         </View>
 
-        {/* Search Bar */}
         <View style={styles.searchContainer}>
-            <Ionicons name="search-outline" size={20} color="#9E9E9E" style={styles.searchIcon} />
-            <TextInput 
-                style={styles.searchInput}
-                placeholder="Search ID, Title or Customer..."
-                placeholderTextColor="#9E9E9E"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-            />
+          <Ionicons
+            name="search-outline"
+            size={20}
+            color="#9E9E9E"
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search ID, Title or Customer..."
+            placeholderTextColor="#9E9E9E"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
         </View>
 
-        {/* List */}
-        <FlatList
-          data={filteredData}
-          keyExtractor={(item) => item.id}
-          renderItem={renderHistoryItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="document-text-outline" size={60} color="#ccc" />
-              <Text style={styles.emptyText}>No history found</Text>
-            </View>
-          }
-        />
-
+        {loading ? (
+          <ActivityIndicator
+            size="large"
+            color="#1e90ff"
+            style={{ marginTop: 40 }}
+          />
+        ) : (
+          <FlatList
+            data={filteredData}
+            keyExtractor={item => item.id}
+            renderItem={renderHistoryItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons
+                  name="document-text-outline"
+                  size={60}
+                  color="#ccc"
+                />
+                <Text style={styles.emptyText}>
+                  No history found
+                </Text>
+              </View>
+            }
+          />
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
+/* ---------------- STYLES (UNCHANGED) ---------------- */
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#E8ECF5',
-  },
-  container: {
-    flex: 1,
-  },
-  // --- MODIFIED HEADER STYLES START ---
+  safeArea: { flex: 1, backgroundColor: '#E8ECF5' },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 40,        // Increased Padding
-    paddingBottom: 20,     // Adjusted Bottom Padding
-    backgroundColor: '#E8ECF5',
-    alignItems: 'center',  // Center Align Items
-    justifyContent: 'center',
+    paddingTop: 40,
+    paddingBottom: 20,
+    alignItems: 'center',
   },
-  // --- MODIFIED HEADER STYLES END ---
   headerTitle: {
     fontSize: 26,
     fontWeight: 'bold',
@@ -160,7 +269,6 @@ const styles = StyleSheet.create({
     color: '#757575',
     marginTop: 4,
   },
-  // Search Styles
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -170,48 +278,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 48,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#333',
-    height: '100%',
-  },
-  // List Styles
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 15 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
-    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
   },
-  ticketId: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#9E9E9E',
-  },
+  ticketId: { fontSize: 13, fontWeight: '700', color: '#9E9E9E' },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,34 +300,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 20,
   },
-  statusClosed: {
-    backgroundColor: '#E8F5E9',
-  },
-  statusPending: {
-    backgroundColor: '#FFF3E0',
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-  textClosed: {
-    color: '#2E7D32',
-  },
-  textPending: {
-    color: '#E65100',
-  },
+  statusClosed: { backgroundColor: '#E8F5E9' },
+  statusPending: { backgroundColor: '#FFF3E0' },
+  statusText: { fontSize: 11, fontWeight: '700', marginLeft: 4 },
+  textClosed: { color: '#2E7D32' },
+  textPending: { color: '#E65100' },
   ticketTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#212121',
     marginBottom: 4,
   },
-  customerName: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 10,
-  },
+  customerName: { fontSize: 14, color: '#555', marginBottom: 10 },
   resolutionContainer: {
     flexDirection: 'row',
     backgroundColor: '#F5F7FA',
@@ -269,21 +333,12 @@ const styles = StyleSheet.create({
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  dateText: {
-    fontSize: 12,
-    color: '#8A8A8A',
-    fontWeight: '500',
-  },
+  dateText: { fontSize: 12, color: '#8A8A8A' },
   emptyState: {
     alignItems: 'center',
     marginTop: 60,
     opacity: 0.5,
   },
-  emptyText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#888',
-  }
+  emptyText: { marginTop: 10, fontSize: 16 },
 });

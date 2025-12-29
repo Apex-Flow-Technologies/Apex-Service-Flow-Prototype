@@ -144,6 +144,7 @@ export default function MyTasksScreen() {
               await updateDoc(doc(db, 'tickets', ticket.id), {
                 status: 'declined',
                 declinedAt: new Date(),
+                
               });
             } catch (err) {
               console.error(err);
@@ -167,7 +168,7 @@ export default function MyTasksScreen() {
           onPress: async () => {
             try {
               await updateDoc(doc(db, 'tickets', ticket.id), {
-                status: 'closed',
+                status: 'waiting_for_confirmation',
                 completedAt: new Date(),
               });
               Alert.alert('Success', 'Job marked as complete!');

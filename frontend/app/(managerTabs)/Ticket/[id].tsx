@@ -18,25 +18,27 @@ import { fetchTechnicians, Technician } from '../data/technicians';
 
 export const href = null;
 
-/* ---------------- STATUS MAPS (FIXED) ---------------- */
+/* ---------------- STATUS MAPS ---------------- */
 
-const statusColor: Record<Ticket['status'], string> = {
+const statusColor: Record<Ticket['status'] | 'declined', string> = {
   New: '#d32f2f',
   Assigned: '#7b1fa2',
   'In Progress': '#2E86DE',
   'Waiting for Confirmation': '#f59e0b',
   Closed: '#43A047',
+  declined: '#D32F2F', // ✅ REQUIRED
 };
 
-const statusIcon: Record<Ticket['status'], string> = {
+const statusIcon: Record<Ticket['status'] | 'declined', string> = {
   New: 'alert-circle',
   Assigned: 'person-add',
   'In Progress': 'sync',
   'Waiting for Confirmation': 'time',
   Closed: 'checkmark-circle',
+  declined: 'close-circle', // ✅ REQUIRED
 };
 
-/* ---------------------------------------------------- */
+/* ------------------------------------------------ */
 
 export default function ManagerTicketDetails() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -54,26 +56,11 @@ export default function ManagerTicketDetails() {
     [id, getTicket]
   );
 
-  /* -------- FETCH TECHNICIANS -------- */
-
   useEffect(() => {
     fetchTechnicians()
-      .then(list => {
-        setTechnicians(list.filter(t => t?.name));
-      })
-      .catch(err => console.error('Failed to fetch technicians', err));
+      .then(list => setTechnicians(list.filter(t => t?.name)))
+      .catch(err => console.error(err));
   }, []);
-
-  /* -------- RESET DROPDOWN ON STATUS CHANGE -------- */
-
-  useEffect(() => {
-    if (ticket?.status !== 'New') {
-      setSelectedTechnician(null);
-      setDropdownOpen(false);
-    }
-  }, [ticket?.status]);
-
-  /* -------- SAFETY -------- */
 
   useEffect(() => {
     if (!ticket) {
@@ -83,7 +70,7 @@ export default function ManagerTicketDetails() {
 
   if (!ticket) return null;
 
-  /* ---------------- ACTIONS ---------------- */
+  const isDeclined = ticket.status === 'declined';
 
   const handleAssign = () => {
     if (!selectedTechnician) {
@@ -94,7 +81,6 @@ export default function ManagerTicketDetails() {
       return;
     }
 
-    // ✅ Assign ONLY (do NOT move to In Progress)
     assignTicket(ticket.id, {
       username: selectedTechnician.username,
       name: selectedTechnician.name,
@@ -130,15 +116,9 @@ export default function ManagerTicketDetails() {
     );
   };
 
-
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-        onScrollBeginDrag={() => dropdownOpen && setDropdownOpen(false)}
-      >
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.headerRow}>
           <TouchableOpacity
             onPress={() => router.replace('/(managerTabs)/PendingTickets')}
@@ -152,12 +132,7 @@ export default function ManagerTicketDetails() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.ticketId}>{ticket.ticketId}</Text>
-            <View
-              style={[
-                styles.badge,
-                { backgroundColor: statusColor[ticket.status] },
-              ]}
-            >
+            <View style={[styles.badge, { backgroundColor: statusColor[ticket.status] }]}>
               <Ionicons
                 name={statusIcon[ticket.status] as any}
                 size={14}
@@ -169,191 +144,133 @@ export default function ManagerTicketDetails() {
           </View>
 
           <Text style={styles.title}>{ticket.title}</Text>
-
           <View style={styles.separator} />
 
           <View style={styles.infoSection}>
             <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Ionicons name="person-outline" size={18} color="#666" />
-                <Text style={styles.infoLabel}>Customer</Text>
-              </View>
+              <Text style={styles.infoLabel}>Customer</Text>
               <Text style={styles.infoValue}>{ticket.customer}</Text>
             </View>
 
             <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Ionicons name="calendar-outline" size={18} color="#666" />
-                <Text style={styles.infoLabel}>Date</Text>
-              </View>
+              <Text style={styles.infoLabel}>Date</Text>
               <Text style={styles.infoValue}>{ticket.date}</Text>
             </View>
 
             {ticket.technician && (
               <View style={styles.infoRow}>
-                <View style={styles.infoItem}>
-                  <Ionicons name="construct-outline" size={18} color="#666" />
-                  <Text style={styles.infoLabel}>Technician</Text>
-                </View>
+                <Text style={styles.infoLabel}>
+                  {isDeclined ? 'Declined by Technician' : 'Technician'}
+                </Text>
                 <Text style={styles.infoValue}>{ticket.technician}</Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* -------- ASSIGN TECHNICIAN -------- */}
-        {ticket.status === 'New' && (
-          <View style={styles.actionCard}>
-            <View style={styles.actionCardHeader}>
-              <Ionicons name="person-add-outline" size={24} color="#2E86DE" />
-              <Text style={styles.actionCardTitle}>Assign Technician</Text>
-            </View>
+        {(ticket.status === 'New' || isDeclined) && (
+  <View style={styles.actionCard}>
+    <View style={styles.actionCardHeader}>
+      <Ionicons name="person-add-outline" size={24} color="#2E86DE" />
+      <Text style={styles.actionCardTitle}>
+        {isDeclined ? 'Reassign Technician' : 'Assign Technician'}
+      </Text>
+    </View>
 
-            <Text style={styles.actionCardDescription}>
-              Assign this ticket to a technician to begin work.
-            </Text>
+    <Text style={styles.actionCardDescription}>
+      {isDeclined
+        ? 'Assign this ticket to another technician.'
+        : 'Assign this ticket to a technician to begin work.'}
+    </Text>
+<View style={styles.dropdownWrapper} ref={dropdownRef}>
+  <Pressable
+    style={[
+      styles.dropdownButton,
+      dropdownOpen && styles.dropdownButtonOpen,
+    ]}
+    onPress={() => setDropdownOpen(!dropdownOpen)}
+  >
+    <View style={styles.dropdownButtonContent}>
+      <Ionicons
+        name="construct-outline"
+        size={20}
+        color={selectedTechnician ? '#212121' : '#8A8A8A'}
+        style={styles.inputIcon}
+      />
+      <Text
+        style={[
+          styles.dropdownButtonText,
+          !selectedTechnician && styles.dropdownButtonPlaceholder,
+        ]}
+      >
+        {selectedTechnician
+          ? selectedTechnician.name
+          : 'Select a technician'}
+      </Text>
+    </View>
 
-            <View style={styles.dropdownWrapper} ref={dropdownRef}>
-              <Pressable
-                style={[
-                  styles.dropdownButton,
-                  dropdownOpen && styles.dropdownButtonOpen,
-                ]}
-                onPress={() => setDropdownOpen(!dropdownOpen)}
-              >
-                <View style={styles.dropdownButtonContent}>
-                  <Ionicons
-                    name="construct-outline"
-                    size={20}
-                    color={selectedTechnician ? '#212121' : '#8A8A8A'}
-                    style={styles.inputIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.dropdownButtonText,
-                      !selectedTechnician &&
-                        styles.dropdownButtonPlaceholder,
-                    ]}
-                  >
-                    {selectedTechnician
-                      ? selectedTechnician.name
-                      : 'Select a technician'}
-                  </Text>
-                </View>
-                <Ionicons
-                  name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  color="#8A8A8A"
-                />
-              </Pressable>
+    <Ionicons
+      name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+      size={20}
+      color="#8A8A8A"
+    />
+  </Pressable>
 
-              {dropdownOpen && (
-                <View style={styles.dropdownList}>
-                  {technicians.map(item => (
-                    <TouchableOpacity
-                      key={item.username}
-                      style={[
-                        styles.dropdownItem,
-                        selectedTechnician?.username === item.username &&
-                          styles.dropdownItemSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedTechnician(item);
-                        setDropdownOpen(false);
-                      }}
-                    >
-                      <Text style={styles.dropdownItemName}>{item.name}</Text>
-                      {selectedTechnician?.username === item.username && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={20}
-                          color="#2E86DE"
-                        />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+  {dropdownOpen && (
+    <View style={styles.dropdownList}>
+      {technicians.map(item => (
+        <TouchableOpacity
+          key={item.username}
+          style={[
+            styles.dropdownItem,
+            selectedTechnician?.username === item.username &&
+              styles.dropdownItemSelected,
+          ]}
+          onPress={() => {
+            setSelectedTechnician(item);
+            setDropdownOpen(false);
+          }}
+        >
+          <Text style={styles.dropdownItemName}>{item.name}</Text>
 
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleAssign}
-            >
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={20}
-                color="#fff"
-              />
-              <Text style={styles.primaryButtonText}>Assign Ticket</Text>
+          {selectedTechnician?.username === item.username && (
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color="#2E86DE"
+            />
+          )}
+        </TouchableOpacity>
+      ))}
+    </View>
+  )}
+</View>
+
+
+            <TouchableOpacity style={styles.primaryButton} onPress={handleAssign}>
+              <Text style={styles.primaryButtonText}>
+                {isDeclined ? 'Reassign Ticket' : 'Assign Ticket'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {ticket.status === 'Waiting for Confirmation' && (
           <View style={styles.actionCard}>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleConfirm}
-            >
-              <Ionicons
-                name="checkmark-done-outline"
-                size={20}
-                color="#fff"
-              />
+            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
               <Text style={styles.confirmButtonText}>
                 Confirm & Close Ticket
               </Text>
             </TouchableOpacity>
           </View>
         )}
-
-        {/* -------- IN PROGRESS INFO BANNER -------- */}
-        {ticket.status === 'In Progress' && (
-          <View style={styles.infoBanner}>
-            <Ionicons
-              name="information-circle-outline"
-              size={24}
-              color="#2E86DE"
-            />
-            <View style={styles.infoBannerContent}>
-              <Text style={styles.infoBannerTitle}>
-                Ticket In Progress
-              </Text>
-              <Text style={styles.infoBannerText}>
-                This ticket is currently being worked on by{' '}
-                <Text style={{ fontWeight: '700' }}>
-                  {ticket.technician || 'the technician'}
-                </Text>
-                . Please wait for the technician to mark it as completed.
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* -------- CLOSED SUCCESS BANNER -------- */}
-        {ticket.status === 'Closed' && (
-          <View style={styles.successBanner}>
-            <Ionicons
-              name="checkmark-circle"
-              size={24}
-              color="#43A047"
-            />
-            <View style={styles.infoBannerContent}>
-              <Text style={styles.successBannerTitle}>
-                Ticket Closed
-              </Text>
-              <Text style={styles.successBannerText}>
-                This ticket has been successfully closed.
-              </Text>
-            </View>
-          </View>
-        )}
-
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+/* styles unchanged */
+
 
 const styles = StyleSheet.create({
   safeArea: {

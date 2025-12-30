@@ -84,7 +84,7 @@ export default function TicketDetails() {
             date: formattedDate,
             machineCode: data.machineCode || 'N/A',
             description: data.description || 'No description provided',
-            status: data.status || 'open',
+            status: data.status || 'open' || 'in progress',
             attachments: data.attachments || [],
           });
         } else {

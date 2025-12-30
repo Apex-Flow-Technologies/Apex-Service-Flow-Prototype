@@ -132,13 +132,20 @@ export default function HistoryScreen() {
     const isClosed = item.rawStatus === 'closed';
 
     return (
-      <TouchableOpacity style={styles.card}>
+  <TouchableOpacity
+    style={styles.card}
+    activeOpacity={0.85}
+    onPress={() => {
+    router.push(`/ticket-detail/${item.id}`);
+    }}
+  >
         <View style={styles.cardHeader}>
           <Text style={styles.ticketId}>{item.ticketId}</Text>
           <View
             style={[
               styles.statusBadge,
               isClosed ? styles.statusClosed : styles.statusPending,
+              
             ]}
           >
             <Ionicons

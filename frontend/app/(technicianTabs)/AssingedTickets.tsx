@@ -62,6 +62,17 @@ export default function MyTasksScreen() {
         snapshot.forEach(docSnap => {
           const d = docSnap.data();
 
+          // Format the creation date
+          let formattedDate = 'N/A';
+          if (d.createdAt?.toDate) {
+            try {
+              const timestamp = d.createdAt.toDate();
+              formattedDate = timestamp.toISOString().split('T')[0];
+            } catch (e) {
+              console.error('Error formatting date:', e);
+            }
+          }
+
           const ticket = {
             id: docSnap.id,
             ticketId: d.ticketId,
@@ -69,7 +80,7 @@ export default function MyTasksScreen() {
             customer: d.userName || 'Customer',
             address: 'xxxx', // Replace with real data field if available
             distance: 'xxxx',
-            date: 'xxxx',
+            date: formattedDate,
             startedAt: d.startedAt
               ? new Date(d.startedAt.toDate()).toLocaleTimeString([], {
                   hour: '2-digit',
@@ -261,51 +272,36 @@ export default function MyTasksScreen() {
             </>
           )}
 
-          {/* --- NEW TAB BUTTONS (Decline & Accept) --- */}
+          {/* --- NEW TAB BUTTON (View Ticket) --- */}
           {isNew && (
-            <>
-              <TouchableOpacity
-                style={[styles.mainButton, styles.btnDecline]}
-                onPress={() => handleDeclineJob(item)}
-              >
-                <Text style={styles.mainButtonText}>Decline</Text>
-                <Ionicons name="close" size={16} color="#fff" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.mainButton, styles.btnStart]}
-                onPress={() => handleAcceptJob(item)}
-              >
-                <Text style={styles.mainButtonText}>Accept</Text>
-                <Ionicons name="checkmark" size={16} color="#fff" />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[styles.mainButton, styles.btnViewTicket]}
+              onPress={() =>
+                router.push({
+                  pathname: '/ticket-detail/[id]',
+                  params: { id: item.id },
+                })
+              }
+            >
+              <Text style={styles.mainButtonText}>View Ticket</Text>
+              <Ionicons name="eye-outline" size={16} color="#fff" />
+            </TouchableOpacity>
           )}
 
-          {/* --- ACTIVE TAB BUTTONS (Done & Continue) --- */}
+          {/* --- ACTIVE TAB BUTTON (View Ticket) --- */}
           {isActive && (
-            <>
-              <TouchableOpacity
-                style={[styles.mainButton, styles.btnComplete]}
-                onPress={() => handleCompleteJob(item)}
-              >
-                <Text style={styles.mainButtonText}>Done</Text>
-                <Ionicons name="checkmark-done" size={16} color="#fff" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.mainButton, styles.btnContinue]}
-                onPress={() =>
-                  router.push({
-                    pathname: '/ticket-detail/[id]',
-                    params: { id: item.id },
-                  })
-                }
-              >
-                {/* Just an arrow for "view details" */}
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[styles.mainButton, styles.btnViewTicket]}
+              onPress={() =>
+                router.push({
+                  pathname: '/ticket-detail/[id]',
+                  params: { id: item.id },
+                })
+              }
+            >
+              <Text style={styles.mainButtonText}>View Ticket</Text>
+              <Ionicons name="eye-outline" size={16} color="#fff" />
+            </TouchableOpacity>
           )}
 
           {/* --- DECLINED TAB (Read Only) --- */}
@@ -466,4 +462,5 @@ const styles = StyleSheet.create({
   btnDecline: { backgroundColor: '#D32F2F', marginRight: 5 },
   btnContinue: { backgroundColor: '#2E86DE', maxWidth: 50 }, // Small button for details arrow
   btnComplete: { backgroundColor: '#43A047', marginRight: 5 },
+  btnViewTicket: { backgroundColor: '#2E86DE' },
 });

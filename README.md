@@ -27,8 +27,5 @@ Create a `.env` file in the root directory with required environment variables.
 ## Contributing
 Pull requests are welcome. Please follow the existing code style.
 
-## License
-MIT License
-
 ## Support
 For issues and questions, please open an issue on GitHub.

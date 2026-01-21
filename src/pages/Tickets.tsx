@@ -10,13 +10,18 @@ import {
   CheckCircle2,
   XCircle,
   ArrowRight,
-  MoreHorizontal
+  MoreHorizontal,
+  Play,
+  Pause,
+  FileAudio,
+  Image as ImageIcon,
+  Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +47,8 @@ import { useStore, Ticket } from '@/store';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
+// --- Configuration ---
+
 type TicketStatus = 'new' | 'assigned' | 'in-progress' | 'completed' | 'declined';
 
 const statusConfig: Record<TicketStatus, { label: string; color: string; bgColor: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -59,15 +66,41 @@ const priorityConfig: Record<string, { label: string; color: string }> = {
   urgent: { label: 'Urgent', color: 'bg-destructive/10 text-destructive' },
 };
 
+// --- Helper Functions ---
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function formatDate(date: Date): string {
+    return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    }).format(date);
+}
+
+// --- Components ---
+
 export default function Tickets() {
   const { tickets, technicians, assignTicket, updateTicket } = useStore();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TicketStatus | 'all'>('all');
+  
+  // Dialog States
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  
+  // Selection States
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [selectedTechnician, setSelectedTechnician] = useState('');
 
+  // Filter Logic
   const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
       ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -77,6 +110,7 @@ export default function Tickets() {
     return matchesSearch && matchesTab;
   });
 
+  // Counts Logic
   const ticketCounts: Record<TicketStatus | 'all', number> = {
     all: tickets.length,
     new: tickets.filter((t) => t.status === 'new').length,
@@ -86,6 +120,7 @@ export default function Tickets() {
     declined: tickets.filter((t) => t.status === 'declined').length,
   };
 
+  // Handlers
   const handleAssign = () => {
     if (selectedTicket && selectedTechnician) {
       assignTicket(selectedTicket.id, selectedTechnician);
@@ -99,15 +134,22 @@ export default function Tickets() {
     }
   };
 
-  const openAssignDialog = (ticket: Ticket) => {
+  const openAssignDialog = (e: React.MouseEvent, ticket: Ticket) => {
+    e.stopPropagation(); // Prevent opening details when clicking assign
     setSelectedTicket(ticket);
     setAssignDialogOpen(true);
+  };
+
+  const openDetailsDialog = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setDetailsDialogOpen(true);
   };
 
   const availableTechnicians = technicians.filter((t) => t.status === 'online' && t.role === 'technician');
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Tickets</h1>
@@ -119,32 +161,20 @@ export default function Tickets() {
         </Button>
       </div>
 
+      {/* Main Content Card */}
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TicketStatus | 'all')} className="w-full lg:w-auto">
               <TabsList className="grid grid-cols-3 lg:grid-cols-6 w-full lg:w-auto">
-                <TabsTrigger value="all" className="text-xs sm:text-sm">
-                  All ({ticketCounts.all})
-                </TabsTrigger>
-                <TabsTrigger value="new" className="text-xs sm:text-sm">
-                  New ({ticketCounts.new})
-                </TabsTrigger>
-                <TabsTrigger value="assigned" className="text-xs sm:text-sm">
-                  Assigned ({ticketCounts.assigned})
-                </TabsTrigger>
-                <TabsTrigger value="in-progress" className="text-xs sm:text-sm">
-                  In Progress ({ticketCounts['in-progress']})
-                </TabsTrigger>
-                <TabsTrigger value="completed" className="text-xs sm:text-sm">
-                  Completed ({ticketCounts.completed})
-                </TabsTrigger>
-                <TabsTrigger value="declined" className="text-xs sm:text-sm relative">
-                  Declined ({ticketCounts.declined})
-                  {ticketCounts.declined > 0 && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 bg-destructive rounded-full" />
-                  )}
-                </TabsTrigger>
+                {['all', 'new', 'assigned', 'in-progress', 'completed', 'declined'].map((tab) => (
+                    <TabsTrigger key={tab} value={tab} className="text-xs sm:text-sm capitalize relative">
+                        {tab.replace('-', ' ')} ({ticketCounts[tab as keyof typeof ticketCounts]})
+                        {tab === 'declined' && ticketCounts.declined > 0 && (
+                            <span className="absolute -top-1 -right-1 h-2 w-2 bg-destructive rounded-full" />
+                        )}
+                    </TabsTrigger>
+                ))}
               </TabsList>
             </Tabs>
 
@@ -170,7 +200,8 @@ export default function Tickets() {
                 <TicketCard
                   key={ticket.id}
                   ticket={ticket}
-                  onAssign={() => openAssignDialog(ticket)}
+                  onAssign={(e) => openAssignDialog(e, ticket)}
+                  onClick={() => openDetailsDialog(ticket)}
                   onStatusChange={(status) => {
                     updateTicket(ticket.id, { status });
                     toast({
@@ -185,13 +216,20 @@ export default function Tickets() {
         </CardContent>
       </Card>
 
-      {/* Assign Dialog */}
+      {/* --- Ticket Details Dialog (New Feature) --- */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            {selectedTicket && <TicketDetailView ticket={selectedTicket} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Assign Dialog --- */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign Ticket</DialogTitle>
             <DialogDescription>
-              Select a technician to assign {selectedTicket?.id} - {selectedTicket?.title}
+              Select a technician to assign {selectedTicket?.id}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -201,9 +239,7 @@ export default function Tickets() {
               </SelectTrigger>
               <SelectContent>
                 {availableTechnicians.length === 0 ? (
-                  <SelectItem value="none" disabled>
-                    No technicians available
-                  </SelectItem>
+                  <SelectItem value="none" disabled>No technicians available</SelectItem>
                 ) : (
                   availableTechnicians.map((tech) => (
                     <SelectItem key={tech.id} value={tech.id}>
@@ -219,12 +255,8 @@ export default function Tickets() {
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAssign} disabled={!selectedTechnician}>
-              Assign Ticket
-            </Button>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAssign} disabled={!selectedTechnician}>Assign Ticket</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -232,14 +264,125 @@ export default function Tickets() {
   );
 }
 
+// --- Ticket Detail Component ---
+
+function TicketDetailView({ ticket }: { ticket: Ticket }) {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const status = statusConfig[ticket.status];
+
+    // Mock Data for fields not yet in your store but requested in UI
+    const machineCode = "MC-AX42";
+    const model = "Apex X200";
+    const category = "Breakdown";
+
+    return (
+        <div className="space-y-6">
+            {/* Header Section */}
+            <div className="flex items-start justify-between border-b pb-4">
+                <div>
+                    <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold mb-2", status.bgColor, status.color)}>
+                        {status.label}
+                    </div>
+                    <h2 className="text-2xl font-bold text-foreground">{ticket.title}</h2>
+                    <div className="flex items-center gap-2 text-muted-foreground mt-1 text-sm">
+                        <Calendar className="h-4 w-4" />
+                        <span>Date: {formatDate(ticket.createdAt)}</span>
+                        <span className="mx-1">•</span>
+                        <span className="font-mono">{ticket.id}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Key Details Grid */}
+            <div className="grid grid-cols-2 gap-x-12 gap-y-4">
+                <div className="flex justify-between border-b border-border/50 pb-1">
+                    <span className="text-muted-foreground font-medium">Machine Code</span>
+                    <span className="font-semibold">{machineCode}</span>
+                </div>
+                <div className="flex justify-between border-b border-border/50 pb-1">
+                    <span className="text-muted-foreground font-medium">Model</span>
+                    <span className="font-semibold">{model}</span>
+                </div>
+                <div className="flex justify-between border-b border-border/50 pb-1">
+                    <span className="text-muted-foreground font-medium">Category</span>
+                    <span className="font-semibold">{category}</span>
+                </div>
+                <div className="flex justify-between border-b border-border/50 pb-1">
+                    <span className="text-muted-foreground font-medium">Priority</span>
+                    <Badge variant="outline" className={cn(priorityConfig[ticket.priority].color)}>
+                        {priorityConfig[ticket.priority].label}
+                    </Badge>
+                </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+                <h3 className="font-semibold text-lg">Description</h3>
+                <p className="text-muted-foreground leading-relaxed text-sm">
+                    {ticket.description}
+                </p>
+            </div>
+
+            {/* Audio Recording Section (New) */}
+            <div className="space-y-2">
+                <h3 className="font-semibold text-lg">Voice Note</h3>
+                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border">
+                    <Button 
+                        size="icon" 
+                        variant="secondary" 
+                        className="h-10 w-10 rounded-full shrink-0"
+                        onClick={() => setIsPlaying(!isPlaying)}
+                    >
+                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-1" />}
+                    </Button>
+                    <div className="flex-1 space-y-1">
+                        <div className="h-1 w-full bg-primary/20 rounded-full overflow-hidden">
+                            <div className={cn("h-full bg-primary transition-all duration-1000", isPlaying ? "w-2/3" : "w-0")} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>0:00</span>
+                            <span>0:45</span>
+                        </div>
+                    </div>
+                    <FileAudio className="h-5 w-5 text-muted-foreground" />
+                </div>
+            </div>
+
+            {/* Attachments */}
+            <div className="space-y-2">
+                <h3 className="font-semibold text-lg">Attachments</h3>
+                <div className="flex gap-4 overflow-x-auto pb-2">
+                    {/* Placeholder for images */}
+                    <div className="relative group cursor-pointer overflow-hidden rounded-xl border aspect-video w-48 bg-muted">
+                         <img 
+                            src="https://images.unsplash.com/photo-1581092921461-eab62e97a780?q=80&w=2670&auto=format&fit=crop" 
+                            alt="Machine Issue" 
+                            className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
+                         />
+                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Button variant="secondary" size="sm" className="gap-2">
+                                <ImageIcon className="h-4 w-4" /> View
+                            </Button>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- Ticket Card Component ---
+
 function TicketCard({
   ticket,
   onAssign,
   onStatusChange,
+  onClick,
 }: {
   ticket: Ticket;
-  onAssign: () => void;
+  onAssign: (e: React.MouseEvent) => void;
   onStatusChange: (status: TicketStatus) => void;
+  onClick: () => void;
 }) {
   const status = statusConfig[ticket.status];
   const priority = priorityConfig[ticket.priority];
@@ -247,8 +390,9 @@ function TicketCard({
 
   return (
     <div
+      onClick={onClick}
       className={cn(
-        'border rounded-lg p-4 hover:shadow-card-hover transition-all',
+        'border rounded-lg p-4 hover:shadow-card-hover transition-all cursor-pointer bg-card', // Added cursor-pointer
         isDeclined && 'border-destructive/50 bg-destructive/5'
       )}
     >
@@ -307,27 +451,32 @@ function TicketCard({
               Assign
             </Button>
           )}
-          
+           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={(e) => e.stopPropagation()} // Prevent card click
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {ticket.status !== 'in-progress' && ticket.status !== 'completed' && (
-                <DropdownMenuItem onClick={() => onStatusChange('in-progress')}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onStatusChange('in-progress'); }}>
                   Mark In Progress
                 </DropdownMenuItem>
               )}
               {ticket.status !== 'completed' && (
-                <DropdownMenuItem onClick={() => onStatusChange('completed')}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onStatusChange('completed'); }}>
                   Mark Completed
                 </DropdownMenuItem>
               )}
               {ticket.status !== 'declined' && (
                 <DropdownMenuItem 
-                  onClick={() => onStatusChange('declined')}
+                  onClick={(e) => { e.stopPropagation(); onStatusChange('declined'); }}
                   className="text-destructive focus:text-destructive"
                 >
                   Mark Declined
@@ -339,13 +488,4 @@ function TicketCard({
       </div>
     </div>
   );
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-  
-  if (seconds < 60) return 'Just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
 }

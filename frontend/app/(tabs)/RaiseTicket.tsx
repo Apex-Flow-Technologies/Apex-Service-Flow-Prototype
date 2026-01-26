@@ -26,6 +26,7 @@ import * as ImagePicker from "expo-image-picker"
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, RecordingPresets } from "expo-audio"
 import { VideoView, useVideoPlayer } from "expo-video"
 import { Image } from "expo-image"
+import { Audio } from "expo-av"
 
 // FIRESTORE
 import { db, auth } from "../../firebaseConfig"
@@ -158,6 +159,16 @@ export default function RaiseTicket() {
 
   const handleAudio = async () => {
     try {
+      // Ensure microphone permissions
+      const perm = await Audio.requestPermissionsAsync()
+      if (!perm.granted) {
+        Toast.show("Microphone permission is required", { duration: Toast.durations.SHORT })
+        return
+      }
+
+      // Ensure audio mode allows recording (iOS especially)
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
+
       if (recorderState.isRecording) {
         await stopRecording()
         return
@@ -166,7 +177,7 @@ export default function RaiseTicket() {
       audioRecorder.record()
       Toast.show("Recording... tap mic again to stop", { duration: Toast.durations.SHORT })
     } catch (e) {
-      Toast.show("Failed to start recording", { duration: Toast.durations.SHORT })
+      Toast.show("Failed to record audio", { duration: Toast.durations.SHORT })
     }
   }
 

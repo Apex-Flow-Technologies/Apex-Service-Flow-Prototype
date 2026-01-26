@@ -10,6 +10,11 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useAudioPlayer } from 'expo-audio';
+import { db } from '../../../firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Ticket } from '../data/tickets';
@@ -51,6 +56,10 @@ export default function ManagerTicketDetails() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<View>(null);
 
+  type Attachment = { type: 'image' | 'video' | 'audio'; uri: string };
+  const [customerAttachments, setCustomerAttachments] = useState<Attachment[]>([]);
+  const [technicianAttachments, setTechnicianAttachments] = useState<Attachment[]>([]);
+
   const ticket = useMemo(
     () => (id ? getTicket(id) : undefined),
     [id, getTicket]
@@ -61,6 +70,24 @@ export default function ManagerTicketDetails() {
       .then(list => setTechnicians(list.filter(t => t?.name)))
       .catch(err => console.error(err));
   }, []);
+
+  // Fetch attachments directly from Firestore for this ticket
+  useEffect(() => {
+    const load = async () => {
+      try {
+        if (!id) return;
+        const ref = doc(db, 'tickets', String(id));
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const data: any = snap.data();
+        setCustomerAttachments(Array.isArray(data.attachments) ? data.attachments : []);
+        setTechnicianAttachments(Array.isArray(data.technicianAttachments) ? data.technicianAttachments : []);
+      } catch (e) {
+        console.error('Failed to fetch attachments', e);
+      }
+    };
+    load();
+  }, [id]);
 
   useEffect(() => {
     if (!ticket) {
@@ -139,7 +166,9 @@ export default function ManagerTicketDetails() {
                 color="#fff"
                 style={{ marginRight: 4 }}
               />
-              <Text style={styles.badgeText}>{ticket.status}</Text>
+              <Text style={styles.badgeText}>
+                {ticket.status === 'Waiting for Confirmation' ? 'Waiting' : ticket.status}
+              </Text>
             </View>
           </View>
 
@@ -166,6 +195,23 @@ export default function ManagerTicketDetails() {
               </View>
             )}
           </View>
+
+          {/* Inline Attachments within the main card */}
+          {customerAttachments.length > 0 && (
+            <>
+              <View style={styles.separator} />
+              <Text style={styles.attachHeader}>Customer Attachments</Text>
+              <AttachmentGrid list={customerAttachments} />
+            </>
+          )}
+
+          {ticket.status === 'Waiting for Confirmation' && technicianAttachments.length > 0 && (
+            <>
+              <View style={styles.separator} />
+              <Text style={styles.attachHeader}>Technician Attachments</Text>
+              <AttachmentGrid list={technicianAttachments} />
+            </>
+          )}
         </View>
 
         {(ticket.status === 'New' || isDeclined) && (
@@ -218,30 +264,32 @@ export default function ManagerTicketDetails() {
 
   {dropdownOpen && (
     <View style={styles.dropdownList}>
-      {technicians.map(item => (
-        <TouchableOpacity
-          key={item.username}
-          style={[
-            styles.dropdownItem,
-            selectedTechnician?.username === item.username &&
-              styles.dropdownItemSelected,
-          ]}
-          onPress={() => {
-            setSelectedTechnician(item);
-            setDropdownOpen(false);
-          }}
-        >
-          <Text style={styles.dropdownItemName}>{item.name}</Text>
+      <ScrollView style={{ maxHeight: 250 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+        {technicians.map(item => (
+          <TouchableOpacity
+            key={item.username}
+            style={[
+              styles.dropdownItem,
+              selectedTechnician?.username === item.username &&
+                styles.dropdownItemSelected,
+            ]}
+            onPress={() => {
+              setSelectedTechnician(item);
+              setDropdownOpen(false);
+            }}
+          >
+            <Text style={styles.dropdownItemName}>{item.name}</Text>
 
-          {selectedTechnician?.username === item.username && (
-            <Ionicons
-              name="checkmark-circle"
-              size={20}
-              color="#2E86DE"
-            />
-          )}
-        </TouchableOpacity>
-      ))}
+            {selectedTechnician?.username === item.username && (
+              <Ionicons
+                name="checkmark-circle"
+                size={20}
+                color="#2E86DE"
+              />
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
     </View>
   )}
 </View>
@@ -266,6 +314,52 @@ export default function ManagerTicketDetails() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/* ---------------- ATTACHMENT GRID ---------------- */
+
+function AttachmentGrid({ list }: { list: { type: 'image' | 'video' | 'audio'; uri: string }[] }) {
+  return (
+    <View style={styles.attachments}>
+      {list.map((a, idx) => {
+        if (a.type === 'image') {
+          return (
+            <Image key={`img-${idx}`} source={{ uri: a.uri }} style={styles.attachmentImg} contentFit="cover" />
+          );
+        }
+        if (a.type === 'video') {
+          return <VideoThumb key={`vid-${idx}`} uri={a.uri} />;
+        }
+        return (
+          <View key={`aud-${idx}`} style={styles.audioPill}>
+            <AudioRow uri={a.uri} />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function VideoThumb({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, p => (p.muted = true));
+  return (
+    <View style={styles.videoThumb}>
+      <VideoView player={player} style={styles.videoThumb} contentFit="cover" />
+      <View style={styles.playOverlay}>
+        <Text style={styles.playIcon}>▶</Text>
+      </View>
+    </View>
+  );
+}
+
+function AudioRow({ uri }: { uri: string }) {
+  const player = useAudioPlayer(uri);
+  return (
+    <TouchableOpacity style={styles.audioRow} onPress={() => (player.playing ? player.pause() : player.play())}>
+      <Text style={styles.audioIcon}>{player.playing ? 'II' : '▶'}</Text>
+      <Text style={styles.audioText}>Audio</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -315,6 +409,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
     marginBottom: 16,
   },
   ticketId: {
@@ -328,6 +423,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    marginLeft: 8,
   },
   badgeText: {
     color: '#fff',
@@ -340,6 +436,12 @@ const styles = StyleSheet.create({
     color: '#252525',
     marginBottom: 16,
     lineHeight: 28,
+  },
+  attachHeader: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#212121',
+    marginBottom: 8,
   },
   separator: {
     height: 1,
@@ -587,4 +689,14 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
   },
+  // Attachments
+  attachments: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  attachmentImg: { width: 120, height: 80, borderRadius: 8 },
+  videoThumb: { width: 120, height: 80, borderRadius: 8, overflow: 'hidden', backgroundColor: '#000' },
+  playOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  playIcon: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  audioPill: { width: 160, height: 50, borderRadius: 10, backgroundColor: '#f1f5f9', justifyContent: 'center' },
+  audioRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 10 },
+  audioIcon: { color: '#1e90ff', fontWeight: '800', fontSize: 16 },
+  audioText: { color: '#222', fontWeight: '600' },
 });

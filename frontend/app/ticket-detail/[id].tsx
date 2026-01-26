@@ -321,7 +321,10 @@ export default function TicketDetailScreen() {
           <Text style={styles.muted}>Date: {ticket.date}</Text>
 
           <View style={styles.separator} />
-          <InfoRow label="Machine Code" value={ticket.machineCode} />
+          <View style={styles.infoStack}>
+            <Text style={styles.infoLabel}>Machine Code</Text>
+            <Text style={styles.infoValueMulti}>{ticket.machineCode}</Text>
+          </View>
 
           <View style={styles.separator} />
           <Text style={styles.sectionTitle}>Description</Text>
@@ -485,7 +488,9 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={styles.infoValue} numberOfLines={1} ellipsizeMode="tail">
+        {value}
+      </Text>
     </View>
   );
 }
@@ -576,9 +581,11 @@ scrollContent: {
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
   body: { color: '#333', lineHeight: 20 },
 
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  infoLabel: { color: '#666', fontWeight: '600' },
-  infoValue: { color: '#222', fontWeight: '700' },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  infoLabel: { color: '#666', fontWeight: '600', flexShrink: 0 },
+  infoValue: { color: '#222', fontWeight: '700', flex: 1, textAlign: 'right', flexShrink: 1 },
+  infoStack: { gap: 4 },
+  infoValueMulti: { color: '#222', fontWeight: '700' },
 
   attachments: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   attachmentImg: { width: 120, height: 80, borderRadius: 8 },

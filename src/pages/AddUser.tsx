@@ -17,6 +17,10 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase"; // adjust path if needed
+
+
 // Schema
 const addUserSchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -45,29 +49,42 @@ export default function AddUser() {
   });
 
   const onSubmit = async (data: AddUserFormValues) => {
-    setIsLoading(true);
+  setIsLoading(true);
 
-    try {
-      // --- MOCK LOGIC (Replace with Firebase logic later) ---
-      console.log("Creating user:", data);
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate delay
-      
-      toast({
-        title: "User Created",
-        description: `${data.name} has been added as a ${data.role}.`,
-      });
+  try {
+    // Save to Firestore
+    await addDoc(collection(db, "user"), {
+      name: data.name,
+      email: data.email,
+      password: data.password, 
+      role: data.role,
+      phone: data.phone || "",
+      status: "offline",
+      activeJobs: 0,
+      createdAt: serverTimestamp(),
+    });
 
-      reset();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to create user.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    toast({
+      title: "User Created",
+      description: `${data.name} has been added as a ${data.role}.`,
+    });
+
+    reset();
+
+  } catch (error) {
+    console.error(error);
+
+    toast({
+      title: "Error",
+      description: "Failed to create user.",
+      variant: "destructive",
+    });
+
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl mx-auto pt-6">

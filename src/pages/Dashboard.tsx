@@ -30,8 +30,7 @@ export default function Dashboard() {
       title: 'Total Tickets',
       value: tickets.length,
       icon: Ticket,
-      trend: '+12%',
-      trendUp: true,
+      // trendUp: true,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
     },
@@ -39,7 +38,6 @@ export default function Dashboard() {
       title: 'Pending Assignment',
       value: tickets.filter((t) => t.status === 'open').length,
       icon: Clock,
-      trend: '2 urgent',
       trendUp: false,
       color: 'text-warning',
       bgColor: 'bg-warning/10',
@@ -48,8 +46,8 @@ export default function Dashboard() {
       title: 'Active Technicians',
       value: technicians.filter((t) => t.status === 'online').length, // we don't have technician status yet
       icon: Users,
-      trend: `of ${technicians.length}`,
-      trendUp: true,
+      
+  
       color: 'text-success',
       bgColor: 'bg-success/10',
     },
@@ -57,8 +55,8 @@ export default function Dashboard() {
       title: 'Completed Today',
       value: tickets.filter((t) => t.status === 'completed').length,
       icon: CheckCircle2,
-      trend: '+3',
-      trendUp: true,
+      // trend: '+3',
+      // trendUp: true,
       color: 'text-success',
       bgColor: 'bg-success/10',
     },
@@ -134,7 +132,7 @@ export default function Dashboard() {
                       'text-xs',
                       stat.trendUp ? 'text-success' : 'text-muted-foreground'
                     )}>
-                      {stat.trend}
+  
                     </span>
                   </div>
                 </div>

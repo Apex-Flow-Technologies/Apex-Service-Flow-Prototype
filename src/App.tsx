@@ -11,6 +11,7 @@ import Tickets from "./pages/Tickets";
 import Settings from "./pages/Settings";
 import AddUser from "./pages/AddUser";
 import NotFound from "./pages/NotFound";
+import Machines from "./pages/Machines";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/technicians" element={<Technicians />} />
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/add-user" element={<AddUser />} />
+            <Route path="/machines" element={<Machines />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<NotFound />} />

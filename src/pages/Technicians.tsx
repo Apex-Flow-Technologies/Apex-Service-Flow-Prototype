@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, MoreHorizontal, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, Phone, Mail, MoreHorizontal, Trash2, Edit, User as UserIcon, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,21 +41,31 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export default function Technicians() {
-  const { technicians, addTechnician, deleteTechnician, fetchTechnicians,} = useStore();
+  // Added updateTechnician to the destructuring
+  const { technicians, addTechnician, updateTechnician, deleteTechnician, fetchTechnicians } = useStore();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Dialog States
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  // Add User State (Includes new username/password fields)
   const [newUser, setNewUser] = useState({
-    
     name: '',
     email: '',
     phone: '',
     role: 'technician' as 'technician' | 'manager',
+    username: '',
+    password: ''
   });
-  useEffect(() => {
-  fetchTechnicians();
-}, [fetchTechnicians]);
 
+  // Edit User State
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    fetchTechnicians();
+  }, [fetchTechnicians]);
 
   const filteredTechnicians = technicians.filter(
     (tech) =>
@@ -63,15 +73,40 @@ export default function Technicians() {
       tech.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // --- Handlers ---
+
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
+    // Pass the full object including username/password to your store
     addTechnician(newUser);
-    setIsDialogOpen(false);
-    setNewUser({ name: '', email: '', phone: '', role: 'technician' });
+    setIsAddDialogOpen(false);
+    setNewUser({ name: '', email: '', phone: '', role: 'technician', username: '', password: '' });
     toast({
       title: 'User added',
       description: `${newUser.name} has been added to the team.`,
     });
+  };
+
+  const openEditDialog = (tech: User) => {
+    setEditingUser(tech);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingUser && updateTechnician) {
+      updateTechnician(editingUser.id, editingUser); // Assuming updateTechnician takes (id, data)
+      setIsEditDialogOpen(false);
+      setEditingUser(null);
+      toast({
+        title: 'Staff updated',
+        description: `${editingUser.name}'s details have been updated.`,
+      });
+    } else {
+        // Fallback if updateTechnician is not implemented in store yet
+        console.warn("updateTechnician function missing from store");
+        setIsEditDialogOpen(false);
+    }
   };
 
   const handleDelete = (tech: User) => {
@@ -90,14 +125,15 @@ export default function Technicians() {
           <p className="text-muted-foreground mt-1">Manage your field service team</p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        {/* --- ADD USER DIALOG --- */}
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
-              Add New User
+              Add Staff
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Team Member</DialogTitle>
               <DialogDescription>
@@ -106,6 +142,37 @@ export default function Technicians() {
             </DialogHeader>
             <form onSubmit={handleAddUser}>
               <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
+                        <div className="relative">
+                            <UserIcon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                id="username"
+                                placeholder="jdoe"
+                                value={newUser.username}
+                                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                                className="pl-8"
+                                required
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="password">Password</Label>
+                        <div className="relative">
+                            <Lock className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                id="password"
+                                type="password"
+                                placeholder="••••••"
+                                value={newUser.password}
+                                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                className="pl-8"
+                                required
+                            />
+                        </div>
+                    </div>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
                   <Input
@@ -156,10 +223,10 @@ export default function Technicians() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">Add User</Button>
+                <Button type="submit">Add Staff</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -192,7 +259,7 @@ export default function Technicians() {
                   <TableHead className="w-[280px]">Name</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Contact</TableHead>
-                  <TableHead>Status</TableHead>
+                  {/* Status Column Removed as requested */}
                   <TableHead className="text-center">Active Jobs</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
@@ -227,22 +294,7 @@ export default function Technicians() {
                         {tech.phone}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            'h-2.5 w-2.5 rounded-full',
-                            tech.status === 'online' ? 'bg-success' : 'bg-muted-foreground/50'
-                          )}
-                        />
-                        <span className={cn(
-                          'text-sm capitalize',
-                          tech.status === 'online' ? 'text-success' : 'text-muted-foreground'
-                        )}>
-                          {tech.status}
-                        </span>
-                      </div>
-                    </TableCell>
+                    {/* Status Cell Removed */}
                     <TableCell className="text-center">
                       <Badge variant="outline" className="font-medium">
                         {tech.activeJobs}
@@ -256,7 +308,7 @@ export default function Technicians() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEditDialog(tech)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
@@ -277,6 +329,73 @@ export default function Technicians() {
           </div>
         </CardContent>
       </Card>
+
+      {/* --- EDIT USER DIALOG --- */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Edit Team Member</DialogTitle>
+                <DialogDescription>Update details for {editingUser?.name}</DialogDescription>
+            </DialogHeader>
+            {editingUser && (
+                <form onSubmit={handleUpdateUser}>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-name">Full Name</Label>
+                            <Input
+                                id="edit-name"
+                                value={editingUser.name}
+                                onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-email">Email Address</Label>
+                            <Input
+                                id="edit-email"
+                                type="email"
+                                value={editingUser.email}
+                                onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-phone">Phone Number</Label>
+                            <Input
+                                id="edit-phone"
+                                value={editingUser.phone}
+                                onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-role">Role</Label>
+                            <Select
+                                value={editingUser.role}
+                                onValueChange={(value: 'technician' | 'manager') =>
+                                    setEditingUser({ ...editingUser, role: value })
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="technician">Technician</SelectItem>
+                                    <SelectItem value="manager">Manager</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit">Save Changes</Button>
+                    </DialogFooter>
+                </form>
+            )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

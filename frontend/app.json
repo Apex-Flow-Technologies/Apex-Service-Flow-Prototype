@@ -8,8 +8,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
-    },
+          "supportsTablet": true,
+          "infoPlist": {
+            "NSMicrophoneUsageDescription": "This app needs microphone access to record audio for service requests."
+          }
+        },
     "android": {
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,

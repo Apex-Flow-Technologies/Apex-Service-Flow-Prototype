@@ -49,6 +49,24 @@ const { height: WINDOW_HEIGHT } = Dimensions.get("window")
 const DROPDOWN_MAX_HEIGHT = Math.min(OPTION_ROW_HEIGHT * 3, Math.floor(WINDOW_HEIGHT * 0.5))
 
 export default function RaiseTicket() {
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+useEffect(() => {
+  const showSub = Keyboard.addListener("keyboardWillShow", (e) => {
+    setKeyboardHeight(e.endCoordinates.height)
+  })
+
+  const hideSub = Keyboard.addListener("keyboardWillHide", () => {
+    setKeyboardHeight(0)
+  })
+
+  return () => {
+    showSub.remove()
+    hideSub.remove()
+  }
+}, [])
+
   const router = useRouter()
 
   // Machine selection (machineCode from firestore)
@@ -274,17 +292,28 @@ export default function RaiseTicket() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="always"
-        scrollEnabled={!showMachineSuggestions}
-        nestedScrollEnabled
-      >
-        <View style={styles.card}>
-          <Text style={styles.title}>New Service Request</Text>
-          <Text style={styles.helper}>Provide details about your issue to help us resolve it faster.</Text>
+<SafeAreaView style={styles.safeArea}>
+  <ScrollView
+    style={styles.container}
+    contentContainerStyle={[
+      styles.content,
+      { paddingBottom: 85 + keyboardHeight },
+    ]}
+    keyboardDismissMode="interactive"
+    keyboardShouldPersistTaps="handled"
+    scrollEnabled={!showMachineSuggestions}
+    nestedScrollEnabled
+  >
+    {/* 👇 THIS is important */}
+    <Pressable onPress={Keyboard.dismiss}></Pressable>
+      <View style={styles.card}>
+        <Text style={styles.title}>New Service Request</Text>
+        <Text style={styles.helper}>
+          Provide details about your issue to help us resolve it faster.
+        </Text>
+
+        {/* rest of your form stays EXACTLY the same */}
+
 
           <Text style={styles.label}>Machine Model</Text>
           <View style={[styles.fieldContainer, showMachineSuggestions && styles.fieldContainerRaised]}>
@@ -367,14 +396,16 @@ export default function RaiseTicket() {
 
           <Text style={styles.label}>Description of Issue</Text>
           <TextInput
-            style={[styles.input, styles.textarea]}
-            placeholder="Describe the issue..."
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
+          style={[styles.input, styles.textarea]}
+          placeholder="Describe the issue..."
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={5}
+          textAlignVertical="top"
+          scrollEnabled={false}
           />
+
 
           <View style={styles.row}>
             <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>

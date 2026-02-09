@@ -4,31 +4,26 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
-  MapPin, 
   User, 
-  Phone,
-  Clock,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  ArrowRight,
-  MoreHorizontal,
-  Play,
-  Pause,
-  FileAudio,
-  Image as ImageIcon,
-  Calendar,
-  Mic,
-  StopCircle,
-  UploadCloud,
-  Trash2,
-  Loader2,
-  Save
+  Phone, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  ArrowRight, 
+  MoreHorizontal, 
+  FileAudio, 
+  Calendar, 
+  Mic, 
+  UploadCloud, 
+  Trash2, 
+  Loader2, 
+  Save, 
+  Briefcase,
+  Monitor
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Ensure you have this component
-import { Textarea } from '@/components/ui/textarea'; // Ensure you have this component (or use Input)
+import { Label } from '@/components/ui/label'; 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -55,14 +50,14 @@ import { cn } from '@/lib/utils';
 // --- FIREBASE IMPORTS ---
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db, storage } from "../firebase"; // Adjust path to your firebase config
+import { db, storage } from "../firebase"; 
 
 // --- Configuration ---
 
 type TicketStatus = 'new' | 'assigned' | 'in-progress' | 'completed' | 'declined';
 
 const statusConfig: Record<TicketStatus, { label: string; color: string; bgColor: string; icon: React.ComponentType<{ className?: string }> }> = {
-  new: { label: 'Unassigned', color: 'text-primary', bgColor: 'bg-primary/10', icon: Clock }, // Changed Label here
+  new: { label: 'Unassigned', color: 'text-primary', bgColor: 'bg-primary/10', icon: Clock },
   assigned: { label: 'Assigned', color: 'text-accent-foreground', bgColor: 'bg-accent', icon: User },
   'in-progress': { label: 'In Progress', color: 'text-warning', bgColor: 'bg-warning/10', icon: ArrowRight },
   completed: { label: 'Completed', color: 'text-success', bgColor: 'bg-success/10', icon: CheckCircle2 },
@@ -79,7 +74,6 @@ const priorityConfig: Record<string, { label: string; color: string }> = {
 // --- Helper Functions ---
 
 function formatTimeAgo(date: Date): string {
-    // Handle Firestore Timestamp or JS Date
     const d = date instanceof Date ? date : (date as any)?.toDate ? (date as any).toDate() : new Date();
     const seconds = Math.floor((new Date().getTime() - d.getTime()) / 1000);
     if (seconds < 60) return 'Just now';
@@ -153,7 +147,6 @@ export default function Tickets() {
       mediaRecorderRef.current.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
-        // Stop all tracks to release microphone
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -190,7 +183,6 @@ export default function Tickets() {
     try {
       const attachments = [];
 
-      // 1. Upload Files
       for (const file of selectedFiles) {
         const fileRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
         await uploadBytes(fileRef, file);
@@ -203,7 +195,6 @@ export default function Tickets() {
         attachments.push({ type, url, name: file.name });
       }
 
-      // 2. Upload Audio
       if (audioBlob) {
         const audioRef = ref(storage, `voice_notes/${Date.now()}_voice.webm`);
         await uploadBytes(audioRef, audioBlob);
@@ -211,11 +202,10 @@ export default function Tickets() {
         attachments.push({ type: 'audio', url, name: 'Voice Note' });
       }
 
-      // 3. Create Ticket in Firestore
       await addDoc(collection(db, "tickets"), {
         ...newTicket,
         status: 'new',
-        displayId: `TKT-${Math.floor(1000 + Math.random() * 9000)}`, // Simple ID gen
+        displayId: `TKT-${Math.floor(1000 + Math.random() * 9000)}`,
         attachments,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -231,7 +221,6 @@ export default function Tickets() {
     }
   };
 
-  // --- EXISTING LOGIC ---
   const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
       ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -278,16 +267,13 @@ export default function Tickets() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Tickets</h1>
           <p className="text-muted-foreground mt-1">Manage and assign service tickets</p>
         </div>
-        
       </div>
 
-      {/* Main Content Card */}
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -295,7 +281,6 @@ export default function Tickets() {
               <TabsList className="grid grid-cols-3 lg:grid-cols-6 w-full lg:w-auto">
                 {['all', 'new', 'assigned', 'in-progress', 'completed', 'declined'].map((tab) => (
                     <TabsTrigger key={tab} value={tab} className="text-xs sm:text-sm capitalize relative">
-                        {/* CHANGE DISPLAY NAME HERE */}
                         {tab === 'new' ? 'Unassigned' : tab.replace('-', ' ')} 
                         {' '}({ticketCounts[tab as keyof typeof ticketCounts]})
                         {tab === 'declined' && ticketCounts.declined > 0 && (
@@ -344,14 +329,12 @@ export default function Tickets() {
         </CardContent>
       </Card>
 
-      {/* --- Ticket Details Dialog --- */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             {selectedTicket && <TicketDetailView ticket={selectedTicket} />}
         </DialogContent>
       </Dialog>
 
-      {/* --- Assign Dialog --- */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -397,41 +380,87 @@ function TicketDetailView({ ticket }: { ticket: Ticket }) {
     const status = statusConfig[ticket.status];
     return (
         <div className="space-y-6">
+            {/* Header Section */}
             <div className="flex items-start justify-between border-b pb-4">
-                <div>
-                     <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold mb-2", status.bgColor, status.color)}>
-                        {status.label}
-                    </div>
-                    <h2 className="text-2xl font-bold">{ticket.title}</h2>
-                    <div className="flex items-center gap-2 text-muted-foreground mt-1 text-sm">
-                        <Calendar className="h-4 w-4" />
-                        <span>Date: {formatDate(ticket.createdAt)}</span>
-                        <span className="mx-1">•</span>
-                        <span className="font-mono">{ticket.displayId}</span>
-                    </div>
-                </div>
-            </div>
-             <div className="space-y-2">
-                <h3 className="font-semibold text-lg">Description</h3>
-                <p className="text-muted-foreground text-sm">{ticket.description}</p>
-            </div>
-             {ticket.attachments?.some(a => a.type === "audio") && (
-                <div className="space-y-2">
-                     <h3 className="font-semibold text-lg">Voice Note</h3>
-                     {ticket.attachments.filter(a => a.type === "audio").map((audio, i) => (
-                         <audio key={i} src={audio.url} controls className="w-full" />
-                     ))}
-                </div>
-             )}
-             {ticket.attachments?.some(a => a.type !== "audio") && (
-                 <div className="space-y-2">
-                     <h3 className="font-semibold text-lg">Attachments</h3>
-                     <div className="flex gap-4 overflow-x-auto pb-2">
-                         {ticket.attachments.filter(a => a.type !== "audio").map((file, i) => (
-                             <img key={i} src={file.url} className="h-24 rounded-lg border" />
-                         ))}
+                <div className="space-y-1.5 w-full">
+                     <div className="flex justify-between items-center w-full mb-2">
+                        <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold", status.bgColor, status.color)}>
+                            {status.label}
+                        </div>
                      </div>
-                 </div>
+                    
+                    {/* CUSTOMER NAME - Main Heading */}
+                    <h2 className="text-2xl font-bold text-foreground">{ticket.customerName || "Unknown Customer"}</h2>
+                    
+                    {/* Sub Info */}
+                    <div className="flex items-center gap-3 text-muted-foreground text-sm">
+                        <div className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>{formatDate(ticket.createdAt)}</span>
+                        </div>
+                        <span>•</span>
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">{ticket.displayId}</span>
+                        <span>•</span>
+                        <div className="font-medium text-foreground">{ticket.title}</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content Section */}
+             <div className="space-y-5">
+                
+                {/* Description */}
+                <div>
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
+                    <p className="text-sm leading-relaxed text-foreground bg-muted/20 p-3 rounded-lg border shadow-sm">
+                        {ticket.description}
+                    </p>
+                </div>
+
+                {/* Highlighted Machine Code */}
+                {ticket.machineCode && (
+                    <div className="flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-100 rounded-lg shadow-sm">
+                        <div className="p-2 bg-blue-100 text-blue-600 rounded-md">
+                            <Monitor className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Machine Involved</p>
+                            <p className="font-semibold text-base text-foreground">{ticket.machineCode}</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+             {/* Attachments Section */}
+             {(ticket.attachments?.length > 0) && (
+                <div className="space-y-3 pt-2">
+                     <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                        <UploadCloud className="h-4 w-4" /> Attachments
+                     </h3>
+                     
+                     {/* Audio Files */}
+                     {ticket.attachments.some(a => a.type === "audio") && (
+                        <div className="space-y-2">
+                             {ticket.attachments.filter(a => a.type === "audio").map((audio, i) => (
+                                 <div key={i} className="bg-muted/50 p-2 rounded-md">
+                                     <p className="text-xs text-muted-foreground mb-1">Voice Note {i+1}</p>
+                                     <audio src={audio.url} controls className="w-full h-8" />
+                                 </div>
+                             ))}
+                        </div>
+                     )}
+
+                     {/* Image/Video Files */}
+                     {ticket.attachments.some(a => a.type !== "audio") && (
+                         <div className="flex gap-3 overflow-x-auto pb-2">
+                             {ticket.attachments.filter(a => a.type !== "audio").map((file, i) => (
+                                 <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="block shrink-0 relative group">
+                                     <img src={file.url} className="h-24 w-24 object-cover rounded-lg border hover:opacity-90 transition-opacity" alt="attachment" />
+                                 </a>
+                             ))}
+                         </div>
+                     )}
+                </div>
              )}
         </div>
     )
@@ -439,26 +468,50 @@ function TicketDetailView({ ticket }: { ticket: Ticket }) {
 
 function TicketCard({ ticket, onAssign, onStatusChange, onClick }: any) {
     const status = statusConfig[ticket.status];
-    const priority = priorityConfig[ticket.priority];
     return (
-        <div onClick={onClick} className="border rounded-lg p-4 hover:shadow-card-hover transition-all cursor-pointer bg-card">
-            <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                 <div className="flex-1 min-w-0 space-y-3">
-                    <div className="flex items-start gap-3">
-                        <div className={cn('p-2 rounded-lg flex-shrink-0', status.bgColor)}>
-                            <status.icon className={cn('h-4 w-4', status.color)} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                             <h3 className="font-semibold text-foreground mt-1">{ticket.title}</h3>
-                             <p className="text-sm text-muted-foreground line-clamp-1">{ticket.description}</p>
+        <div onClick={onClick} className="group border rounded-lg p-4 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer bg-card relative overflow-hidden">
+            <div className={cn("absolute left-0 top-0 bottom-0 w-1", status.bgColor.replace('/10', ''))} />
+            
+            <div className="flex flex-col gap-3 pl-2">
+                 <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                        {/* CUSTOMER NAME TOP */}
+                        <h3 className="font-bold text-lg text-foreground">{ticket.customerName}</h3>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="font-mono">{ticket.displayId}</span>
+                            <span>•</span>
+                            <span>{formatTimeAgo(ticket.createdAt)}</span>
                         </div>
                     </div>
+                    <div className={cn('p-1.5 rounded-md', status.bgColor)}>
+                        <status.icon className={cn('h-4 w-4', status.color)} />
+                    </div>
                  </div>
-                  {ticket.status === 'new' && (
-                    <Button onClick={(e) => { e.stopPropagation(); onAssign(e); }} size="sm" className="gap-1.5">
-                        <User className="h-3.5 w-3.5" /> Assign
-                    </Button>
-                  )}
+
+                 {/* MODIFIED BODY - REMOVED TITLE, KEPT FULL DESCRIPTION */}
+                 <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                        {ticket.description}
+                    </p>
+                 </div>
+
+                 <div className="flex items-center justify-between mt-1 pt-3 border-t">
+                    {/* Machine Code Highlighted - Location Removed */}
+                    <div className="flex gap-2">
+                        {ticket.machineCode && (
+                            <Badge variant="secondary" className="text-xs font-medium text-foreground bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 border">
+                                <Monitor className="h-3 w-3 mr-1.5" /> 
+                                {ticket.machineCode}
+                            </Badge>
+                        )}
+                    </div>
+
+                    {ticket.status === 'new' && (
+                        <Button onClick={(e) => { e.stopPropagation(); onAssign(e); }} size="sm" className="h-8 text-xs gap-1.5">
+                            <User className="h-3.5 w-3.5" /> Assign
+                        </Button>
+                    )}
+                 </div>
             </div>
         </div>
     )

@@ -1,7 +1,22 @@
-import { orderBy } from "firebase/firestore";
-import * as XLSX from "xlsx";
-import { Upload, FileSpreadsheet, User, Phone, MapPin, Lock, AtSign } from "lucide-react"; // Added icons
 import { useEffect, useState } from "react";
+import { 
+  Upload, 
+  FileSpreadsheet, 
+  User, 
+  Phone, 
+  MapPin, 
+  Lock, 
+  AtSign,
+  Plus, 
+  MoreHorizontal, 
+  Wrench, 
+  Search, 
+  ChevronsUpDown, 
+  Trash2, 
+  Save, 
+  Loader2 
+} from "lucide-react";
+
 import {
   collection,
   getDocs,
@@ -12,21 +27,14 @@ import {
   doc,
   serverTimestamp,
   deleteDoc,
+  orderBy
 } from "firebase/firestore";
 import { db } from "@/firebase";
-
-import {
-  Plus,
-  MoreHorizontal,
-  Wrench,
-  Search,
-  ChevronsUpDown,
-  Trash2,
-} from "lucide-react";
+import * as XLSX from "xlsx";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Make sure to import Label
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -41,7 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription, // Added Description
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -69,31 +77,17 @@ import {
 
 import { useToast } from "@/hooks/use-toast";
 
-export default function Users() {
+export default function Customers() {
   const { toast } = useToast();
 
-  // ---------------- EDIT CUSTOMER ----------------
-  const [editCustomer, setEditCustomer] = useState<any>(null);
-  const editingCustomerId = editCustomer?.id || null;
-
-  const [editForm, setEditForm] = useState({
-    name: "",
-    phone: "",
-    address: "",
-  });
-
-  // ---------------- BULK UPLOAD ----------------
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkPreview, setBulkPreview] = useState<any[]>([]);
-  const [bulkUploading, setBulkUploading] = useState(false);
-  const [bulkParsing, setBulkParsing] = useState(false);
-
-  // ---------------- NORMAL STATE ----------------
+  // ---------------- STATE ----------------
   const [customers, setCustomers] = useState<any[]>([]);
   const [machines, setMachines] = useState<any[]>([]);
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
+  // Add Dialog State
+  const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -102,20 +96,42 @@ export default function Users() {
     password: "",
   });
 
-  // ---------------- FETCH DATA ----------------
+  // Edit Dialog State
+  const [editCustomer, setEditCustomer] = useState<any>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    username: "",
+  });
+
+  // Bulk Upload State
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState<any[]>([]);
+  const [bulkUploading, setBulkUploading] = useState(false);
+
+  // ---------------- INITIAL FETCH ----------------
   const fetchCustomers = async () => {
-    const q = query(
-      collection(db, "user"),
-      where("role", "==", "user"),
-      orderBy("name", "asc")
-    );
-    const snap = await getDocs(q);
-    setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    try {
+      const q = query(
+        collection(db, "user"),
+        where("role", "==", "user"),
+        orderBy("name", "asc")
+      );
+      const snap = await getDocs(q);
+      setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Error fetching customers:", error);
+    }
   };
 
   const fetchMachines = async () => {
-    const snap = await getDocs(collection(db, "machines"));
-    setMachines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    try {
+      const snap = await getDocs(collection(db, "machines"));
+      setMachines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Error fetching machines:", error);
+    }
   };
 
   useEffect(() => {
@@ -132,133 +148,164 @@ export default function Users() {
   const availableMachines = (customerId: string) =>
     machines.filter((m) => !m.assignedTo || m.assignedTo === customerId);
 
-  // ---------------- CREATE CUSTOMER ----------------
-  const createCustomer = async () => {
-    const { name, phone, address, username, password } = form;
+  // ---------------- HANDLERS ----------------
 
-    if (!name || !phone || !username || !password) {
+  // 1. Handle Edit Click - ROBUST MAPPING
+  const handleEditClick = (customer: any) => {
+    setEditCustomer(customer);
+    // Explicitly map fields, default to empty string if undefined (fixes "older customer" issue)
+    setEditForm({
+      name: customer.name || "",
+      phone: customer.phone || "",
+      address: customer.address || "",
+      username: customer.username || "", // Ensures username is grabbed
+    });
+  };
+
+  // 2. Save Edit - OPTIMISTIC UPDATE
+  const saveCustomerEdits = async () => {
+    if (!editCustomer?.id) return;
+    setIsSaving(true);
+
+    try {
+      // Update Backend
+      const docRef = doc(db, "user", editCustomer.id);
+      await updateDoc(docRef, {
+        name: editForm.name,
+        phone: editForm.phone,
+        address: editForm.address,
+        username: editForm.username,
+      });
+
+      // Update Local State (Immediate UI change)
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === editCustomer.id ? { ...c, ...editForm } : c
+        )
+      );
+
+      toast({ title: "Customer updated successfully" });
+      setEditCustomer(null);
+    } catch (error) {
+      console.error("Update failed:", error);
+      toast({ title: "Failed to update", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 3. Create Customer
+  const createCustomer = async () => {
+    if (!form.name || !form.username || !form.password) {
       toast({
         title: "Missing fields",
-        description: "Please fill all required fields.",
+        description: "Name, Username, and Password are required.",
         variant: "destructive",
       });
       return;
     }
+    setIsSaving(true);
 
-    await addDoc(collection(db, "user"), {
-      name,
-      phone,
-      address,
-      username,
-      password,
-      role: "user",
-      createdAt: serverTimestamp(),
-    });
+    try {
+      const newDoc = await addDoc(collection(db, "user"), {
+        ...form,
+        role: "user",
+        createdAt: serverTimestamp(),
+      });
 
-    toast({ title: "Customer created" });
+      // Add to local list immediately
+      setCustomers((prev) => [
+        ...prev,
+        { id: newDoc.id, ...form, role: "user" },
+      ]);
 
-    setForm({
-      name: "",
-      phone: "",
-      address: "",
-      username: "",
-      password: "",
-    });
-
-    setAddOpen(false);
-    fetchCustomers();
+      toast({ title: "Customer created" });
+      setForm({ name: "", phone: "", address: "", username: "", password: "" });
+      setAddOpen(false);
+    } catch (error) {
+      console.error("Create failed:", error);
+      toast({ title: "Failed to create", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // ---------------- EDIT CUSTOMER ----------------
-  const saveCustomerEdits = async () => {
-    if (!editingCustomerId) return;
-
-    await updateDoc(doc(db, "user", editingCustomerId), {
-      name: editForm.name,
-      phone: editForm.phone,
-      address: editForm.address,
-    });
-
-    toast({ title: "Customer updated" });
-    setEditCustomer(null);
-    fetchCustomers();
-  };
-
+  // 4. Machine Assignment Handlers
   const assignMachine = async (machineId: string) => {
-    if (!editingCustomerId) return;
-
+    if (!editCustomer?.id) return;
+    // Optimistic UI Update for Machines
+    setMachines(prev => prev.map(m => m.id === machineId ? { ...m, assignedTo: editCustomer.id } : m));
+    
     await updateDoc(doc(db, "machines", machineId), {
-      assignedTo: editingCustomerId,
+      assignedTo: editCustomer.id,
     });
-
-    fetchMachines();
   };
 
   const unassignMachine = async (machineId: string) => {
+    // Optimistic UI Update
+    setMachines(prev => prev.map(m => m.id === machineId ? { ...m, assignedTo: null } : m));
+
     await updateDoc(doc(db, "machines", machineId), {
       assignedTo: null,
     });
-
-    fetchMachines();
   };
 
-  // ---------------- DELETE CUSTOMER ----------------
   const deleteCustomer = async (customer: any) => {
-    const related = machines.filter((m) => m.assignedTo === customer.id);
+    // REMOVED CONFIRMATION POPUP HERE
+    
+    // Unassign all machines locally first
+    setMachines(prev => prev.map(m => m.assignedTo === customer.id ? { ...m, assignedTo: null } : m));
+    
+    // Remove customer locally
+    setCustomers(prev => prev.filter(c => c.id !== customer.id));
 
-    for (const m of related) {
-      await updateDoc(doc(db, "machines", m.id), { assignedTo: null });
+    try {
+        // Backend Cleanup
+        const related = machines.filter((m) => m.assignedTo === customer.id);
+        for (const m of related) {
+          await updateDoc(doc(db, "machines", m.id), { assignedTo: null });
+        }
+        await deleteDoc(doc(db, "user", customer.id));
+        
+        toast({ title: "Customer deleted" });
+    } catch (error) {
+        console.error("Delete failed", error);
+        toast({ title: "Error deleting customer", variant: "destructive" });
     }
-
-    await deleteDoc(doc(db, "user", customer.id));
-    toast({ title: "Customer deleted", variant: "destructive" });
-
-    fetchCustomers();
-    fetchMachines();
   };
 
   const filteredCustomers = customers.filter((c) =>
-    c.name?.toLowerCase().includes(search.toLowerCase())
+    c.name?.toLowerCase().includes(search.toLowerCase()) || 
+    c.username?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ---------------- UI ----------------
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* HEADER */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Customers</h1>
-          <p className="text-muted-foreground">
-            Manage customers and assign machines
-          </p>
+          <p className="text-muted-foreground">Manage customers and assign machines</p>
         </div>
-
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="border-green-600 text-green-600"
-            onClick={() => setBulkOpen(true)}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Bulk Upload
+          <Button variant="outline" className="border-green-600 text-green-600" onClick={() => setBulkOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" /> Bulk Upload
           </Button>
-
           <Button onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Customer
+            <Plus className="h-4 w-4 mr-2" /> Add Customer
           </Button>
         </div>
       </div>
 
       {/* CUSTOMER TABLE */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <div className="flex justify-between items-center">
             <CardTitle>Customer List</CardTitle>
             <div className="relative w-72">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search..."
+                placeholder="Search name or username..."
                 className="pl-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -266,309 +313,256 @@ export default function Users() {
             </div>
           </div>
         </CardHeader>
-
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead>Full Name</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Machines</TableHead>
-                <TableHead />
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCustomers.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>{c.name}</TableCell>
-                  <TableCell>{c.username}</TableCell>
-                  <TableCell>{c.phone}</TableCell>
-                  <TableCell>
-                    {assignedMachines(c.id).length || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost">
-                          <MoreHorizontal />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditCustomer(c);
-                            setEditForm({
-                              name: c.name || "",
-                              phone: c.phone || "",
-                              address: c.address || "",
-                            });
-                          }}
-                        >
-                          <Wrench className="mr-2 h-4 w-4" />
-                          Edit Customer
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => deleteCustomer(c)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredCustomers.length === 0 ? (
+                 <TableRow>
+                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                        No customers found.
+                    </TableCell>
+                 </TableRow>
+              ) : (
+                filteredCustomers.map((c) => (
+                  <TableRow key={c.id} className="hover:bg-muted/30">
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    {/* CHANGED: Removed dim styling to make it visible like phone number */}
+                    <TableCell>{c.username || "-"}</TableCell>
+                    <TableCell>{c.phone || "-"}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center justify-center bg-primary/10 text-primary rounded-full px-2.5 py-0.5 text-xs font-medium">
+                        {assignedMachines(c.id).length}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditClick(c)}>
+                            <Wrench className="mr-2 h-4 w-4" /> Edit Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteCustomer(c)}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* ---------------- UPDATED ADD CUSTOMER DIALOG ---------------- */}
+      {/* ---------------- ADD DIALOG ---------------- */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Create New Customer</DialogTitle>
-            <DialogDescription>
-              Enter the details below to register a new customer account.
-            </DialogDescription>
+            <DialogTitle>Add Customer</DialogTitle>
+            <DialogDescription>Create a new customer account.</DialogDescription>
           </DialogHeader>
-
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label>Full Name <span className="text-red-500">*</span></Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="name"
-                    placeholder="John Doe"
-                    className="pl-9"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  />
+                    <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="John Doe" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label>Phone</Label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    placeholder="+91 98765 43210"
-                    className="pl-9"
-                    value={form.phone}
-                    onChange={(e) =>
-                      setForm({ ...form, phone: e.target.value })
-                    }
-                  />
+                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="+1 234..." value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} />
                 </div>
               </div>
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="address"
-                  placeholder="Street, City, State"
-                  className="pl-9"
-                  value={form.address}
-                  onChange={(e) =>
-                    setForm({ ...form, address: e.target.value })
-                  }
-                />
-              </div>
+                <Label>Address</Label>
+                <div className="relative">
+                    <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="City, State" value={form.address} onChange={(e) => setForm({...form, address: e.target.value})} />
+                </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 mt-2">
-              <div className="space-y-2">
-                <Label htmlFor="username">App Username</Label>
-                <div className="relative">
-                  <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="username"
-                    placeholder="jdoe123"
-                    className="pl-9"
-                    value={form.username}
-                    onChange={(e) =>
-                      setForm({ ...form, username: e.target.value })
-                    }
-                  />
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>App Username <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                        <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input className="pl-9" placeholder="user123" value={form.username} onChange={(e) => setForm({...form, username: e.target.value})} />
+                    </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">App Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••"
-                    className="pl-9"
-                    value={form.password}
-                    onChange={(e) =>
-                      setForm({ ...form, password: e.target.value })
-                    }
-                  />
+                <div className="space-y-2">
+                    <Label>Password <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input className="pl-9" type="password" placeholder="••••••" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} />
+                    </div>
                 </div>
-              </div>
             </div>
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button onClick={createCustomer} disabled={isSaving}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create
             </Button>
-            <Button onClick={createCustomer}>Create Customer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* EDIT CUSTOMER DIALOG */}
-      <Dialog
-        open={!!editCustomer}
-        onOpenChange={() => setEditCustomer(null)}
-      >
+      {/* ---------------- EDIT DIALOG (Fixed & Labeled) ---------------- */}
+      <Dialog open={!!editCustomer} onOpenChange={() => setEditCustomer(null)}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Edit Customer</DialogTitle>
+            <DialogDescription>Update details and manage machine assignments.</DialogDescription>
           </DialogHeader>
 
-          <Input
-            value={editForm.name}
-            onChange={(e) =>
-              setEditForm({ ...editForm, name: e.target.value })
-            }
-          />
-          <Input
-            value={editForm.phone}
-            onChange={(e) =>
-              setEditForm({ ...editForm, phone: e.target.value })
-            }
-          />
-          <Input
-            value={editForm.address}
-            onChange={(e) =>
-              setEditForm({ ...editForm, address: e.target.value })
-            }
-          />
+          <div className="grid gap-5 py-4">
+            {/* 1. Name & Phone */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="edit-name">Full Name</Label>
+                    <div className="relative">
+                        <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input id="edit-name" className="pl-9" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="edit-phone">Phone Number</Label>
+                    <div className="relative">
+                        <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input id="edit-phone" className="pl-9" value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} />
+                    </div>
+                </div>
+            </div>
 
-          {editingCustomerId && (
-            <>
-              <div className="mt-4">
-                <h4 className="font-medium mb-2">Assigned Machines</h4>
-                {assignedMachines(editingCustomerId).map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex justify-between items-center border rounded px-3 py-2 mb-2"
-                  >
-                    <span>{getMachineLabel(m)}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => unassignMachine(m.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
+            {/* 2. Address */}
+            <div className="space-y-2">
+                <Label htmlFor="edit-address">Address</Label>
+                <div className="relative">
+                    <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input id="edit-address" className="pl-9" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} />
+                </div>
+            </div>
 
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between"
-                  >
-                    Assign Machine
-                    <ChevronsUpDown className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="p-0">
-                  <Command>
-                    <CommandInput placeholder="Search machine..." />
-                    <CommandGroup>
-                      {availableMachines(editingCustomerId).map((m) => (
-                        <CommandItem
-                          key={m.id}
-                          onSelect={() => assignMachine(m.id)}
-                        >
-                          {getMachineLabel(m)}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </>
-          )}
+            {/* 3. Username */}
+            <div className="space-y-2">
+                <Label htmlFor="edit-username">App Username</Label>
+                <div className="relative">
+                    <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input id="edit-username" className="pl-9" value={editForm.username} onChange={(e) => setEditForm({...editForm, username: e.target.value})} />
+                </div>
+            </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCustomer(null)}>
-              Cancel
+            {/* Machine Assignment Section */}
+            {editCustomer?.id && (
+                <div className="border-t pt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Assigned Machines</h4>
+                        
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-8 border-dashed gap-2">
+                                    <Plus className="h-3 w-3" /> Assign New
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-0" align="end">
+                                <Command>
+                                    <CommandInput placeholder="Search machine..." />
+                                    <CommandGroup className="max-h-[200px] overflow-y-auto">
+                                        {availableMachines(editCustomer.id).length === 0 ? (
+                                            <div className="p-3 text-xs text-center text-muted-foreground">No unassigned machines found.</div>
+                                        ) : (
+                                            availableMachines(editCustomer.id).map((m) => (
+                                                <CommandItem key={m.id} onSelect={() => assignMachine(m.id)}>
+                                                    <Wrench className="mr-2 h-4 w-4 text-muted-foreground" />
+                                                    {getMachineLabel(m)}
+                                                </CommandItem>
+                                            ))
+                                        )}
+                                    </CommandGroup>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                        {assignedMachines(editCustomer.id).length === 0 ? (
+                            <div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded-md text-center">
+                                No machines currently assigned.
+                            </div>
+                        ) : (
+                            assignedMachines(editCustomer.id).map((m) => (
+                                <div key={m.id} className="flex justify-between items-center bg-card border rounded-md p-2 pl-3 shadow-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
+                                            <Wrench className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span className="text-sm font-medium">{getMachineLabel(m)}</span>
+                                    </div>
+                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => unassignMachine(m.id)}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setEditCustomer(null)}>Cancel</Button>
+            <Button onClick={saveCustomerEdits} disabled={isSaving}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes
             </Button>
-            <Button onClick={saveCustomerEdits}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* BULK UPLOAD DIALOG */}
+      {/* BULK UPLOAD DIALOG - Unchanged */}
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
             <DialogTitle>Bulk Upload Customers</DialogTitle>
           </DialogHeader>
-
           {!bulkPreview.length ? (
-            <div
-              className="border-2 border-dashed rounded-lg p-10 text-center cursor-pointer"
-              onClick={() => document.getElementById("bulkFile")?.click()}
-            >
-              <FileSpreadsheet className="mx-auto h-10 w-10" />
-              <p className="mt-2 text-sm">Click to upload XLSX</p>
-              <input
-                id="bulkFile"
-                type="file"
-                accept=".xlsx"
-                hidden
-                onChange={async (e) => {
+            <div className="border-2 border-dashed rounded-lg p-10 text-center cursor-pointer hover:bg-muted/50 transition" onClick={() => document.getElementById("bulkFile")?.click()}>
+              <FileSpreadsheet className="mx-auto h-10 w-10 text-muted-foreground" />
+              <p className="mt-2 text-sm text-muted-foreground">Click to select .xlsx file</p>
+              <input id="bulkFile" type="file" accept=".xlsx" hidden onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-
-                  setBulkParsing(true);
                   const buffer = await file.arrayBuffer();
                   const wb = XLSX.read(buffer);
                   const ws = wb.Sheets[wb.SheetNames[0]];
-                  const data = XLSX.utils.sheet_to_json(ws);
-                  setBulkPreview(data as any[]);
-                  setBulkParsing(false);
-                }}
-              />
+                  setBulkPreview(XLSX.utils.sheet_to_json(ws) as any[]);
+                }} />
             </div>
           ) : (
             <DialogFooter>
-              <Button
-                disabled={bulkUploading}
-                onClick={async () => {
+              <Button disabled={bulkUploading} onClick={async () => {
                   setBulkUploading(true);
-                  for (const r of bulkPreview) {
-                    await addDoc(collection(db, "user"), {
-                      ...r,
-                      role: "user",
-                      createdAt: serverTimestamp(),
-                    });
-                  }
-                  setBulkUploading(false);
-                  setBulkOpen(false);
-                  setBulkPreview([]);
-                  fetchCustomers();
-                }}
-              >
-                Upload
+                  for (const r of bulkPreview) await addDoc(collection(db, "user"), { ...r, role: "user", createdAt: serverTimestamp() });
+                  setBulkUploading(false); setBulkOpen(false); setBulkPreview([]); fetchCustomers();
+                }}>
+                {bulkUploading ? "Uploading..." : "Confirm Upload"}
               </Button>
             </DialogFooter>
           )}

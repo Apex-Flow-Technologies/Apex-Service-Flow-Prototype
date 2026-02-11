@@ -146,8 +146,11 @@ export default function Customers() {
   const assignedMachines = (customerId: string) =>
     machines.filter((m) => m.assignedTo === customerId);
 
-  const availableMachines = (customerId: string) =>
-    machines.filter((m) => !m.assignedTo || m.assignedTo === customerId);
+const availableMachines = () =>
+  machines
+    .filter((m) => !m.assignedTo)
+    .sort((a, b) => (b.machineCode || "").localeCompare(a.machineCode || ""));
+
 
   // ---------------- HANDLERS ----------------
 
@@ -520,10 +523,10 @@ export default function Customers() {
                                 <Command>
                                     <CommandInput placeholder="Search machine..." />
                                     <CommandGroup className="max-h-[200px] overflow-y-auto">
-                                        {availableMachines(editCustomer.id).length === 0 ? (
+                                        {availableMachines().length === 0 ? (
                                             <div className="p-3 text-xs text-center text-muted-foreground">No unassigned machines found.</div>
                                         ) : (
-                                            availableMachines(editCustomer.id).map((m) => (
+                                            availableMachines().map((m) => (
                                                 <CommandItem key={m.id} onSelect={() => assignMachine(m.id)}>
                                                     <Wrench className="mr-2 h-4 w-4 text-muted-foreground" />
                                                     {getMachineLabel(m)}

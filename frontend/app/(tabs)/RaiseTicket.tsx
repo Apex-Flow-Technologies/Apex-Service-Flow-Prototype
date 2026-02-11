@@ -1,4 +1,4 @@
-// RaiseTicket.tsx
+// app/(tabs)/RaiseTicket.tsx
 "use client"
 
 // @ts-nocheck
@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
+// ✅ FIX: Using only expo-audio (no expo-av)
 import { RecordingPresets, useAudioPlayer, useAudioRecorder, useAudioRecorderState } from "expo-audio";
-import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
@@ -18,7 +18,6 @@ import {
   Keyboard,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +25,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+// ✅ FIX: Use new SafeAreaView to stop warnings
+import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-root-toast";
 
 // FIRESTORE
@@ -42,6 +43,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+// ✅ Ensure this path is correct for your project structure
 import { db } from "../../firebaseConfig";
 
 const OPTION_ROW_HEIGHT = 48
@@ -52,25 +54,25 @@ export default function RaiseTicket() {
 
   const [keyboardHeight, setKeyboardHeight] = useState(0)
 
-useEffect(() => {
-  const showSub = Keyboard.addListener("keyboardWillShow", (e) => {
-    setKeyboardHeight(e.endCoordinates.height)
-  })
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardWillShow", (e) => {
+      setKeyboardHeight(e.endCoordinates.height)
+    })
 
-  const hideSub = Keyboard.addListener("keyboardWillHide", () => {
-    setKeyboardHeight(0)
-  })
+    const hideSub = Keyboard.addListener("keyboardWillHide", () => {
+      setKeyboardHeight(0)
+    })
 
-  return () => {
-    showSub.remove()
-    hideSub.remove()
-  }
-}, [])
+    return () => {
+      showSub.remove()
+      hideSub.remove()
+    }
+  }, [])
 
   const router = useRouter()
 
   // Machine selection (machineCode from firestore)
-  const [selectedMachine, setSelectedMachine] = useState("") // e.g. "(2-07-08 | DUST COLLECTOR)"
+  const [selectedMachine, setSelectedMachine] = useState("") 
   const [machineQuery, setMachineQuery] = useState("")
   const [showMachineSuggestions, setShowMachineSuggestions] = useState(false)
 
@@ -97,7 +99,7 @@ useEffect(() => {
         const currentUserStr = await AsyncStorage.getItem("currentUser");
         if (!currentUserStr) return;
 
-        const user = JSON.parse(currentUserStr); // user.id should exist
+        const user = JSON.parse(currentUserStr); 
         const q = query(collection(db, "machines"), where("assignedTo", "==", user.id));
 
         const snapshot = await getDocs(q);
@@ -175,60 +177,45 @@ useEffect(() => {
     setAttachments((prev) => [...prev, { type: "video", uri: asset.uri }])
   }
 
-const handleAudio = async () => {
-  try {
-    // Ask permission
-    const perm = await Audio.requestPermissionsAsync()
-    if (!perm.granted) {
-      Toast.show("Microphone permission is required", { duration: Toast.durations.SHORT })
-      return
+  // ✅ FIXED: New handleAudio using only expo-audio
+  const handleAudio = async () => {
+    try {
+      if (recorderState.isRecording) {
+        await stopRecording()
+        return
+      }
+
+      // Automatically requests permissions when recording starts
+      await audioRecorder.record()
+      Toast.show("Recording... tap mic again to stop", { duration: Toast.durations.SHORT })
+      
+    } catch (e) {
+      console.log("Audio error:", e)
+      Toast.show("Microphone permission required", { duration: Toast.durations.SHORT })
     }
-
-    // VERY IMPORTANT for iOS — enable recording mode BEFORE recording
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    })
-
-    if (recorderState.isRecording) {
-      await stopRecording()
-      return
-    }
-
-    await audioRecorder.prepareToRecordAsync()
-    await audioRecorder.record()
-
-    Toast.show("Recording... tap mic again to stop", { duration: Toast.durations.SHORT })
-  } catch (e) {
-    console.log("Audio error:", e)
-    Toast.show("Failed to record audio", { duration: Toast.durations.SHORT })
   }
-}
 
-
-
+  // ✅ FIXED: New stopRecording using only expo-audio
   const stopRecording = async () => {
-  try {
-    await audioRecorder.stop()
+    try {
+      await audioRecorder.stop()
+      
+      const uri = audioRecorder.uri
+      // Use recorderState duration or calculate if needed
+      const duration = recorderState.durationMillis || 0
 
-    // IMPORTANT — reset iOS audio mode after recording
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-    })
-
-    const uri = audioRecorder.uri
-    if (uri) {
-      setAttachments((prev) => [
-        ...prev,
-        { type: "audio", uri, durationMs: recorderState.durationMillis },
-      ])
-      Toast.show("Recording saved", { duration: Toast.durations.SHORT })
+      if (uri) {
+        setAttachments((prev) => [
+          ...prev,
+          { type: "audio", uri, durationMs: duration },
+        ])
+        Toast.show("Recording saved", { duration: Toast.durations.SHORT })
+      }
+    } catch (e) {
+      console.log("Stop error:", e)
+      Toast.show("Failed to stop recording", { duration: Toast.durations.SHORT })
     }
-  } catch (e) {
-    console.log("Stop error:", e)
-    Toast.show("Failed to stop recording", { duration: Toast.durations.SHORT })
   }
-}
 
 
   const removeAttachment = (idx: number) => {
@@ -303,7 +290,7 @@ const handleAudio = async () => {
       setDescription("")
       setAttachments([])
 
-      router.replace("/(tabs)/Tickets") // navigate to Tickets page (optional)
+      router.replace("/(tabs)/Tickets") 
     } catch (err) {
       console.log("Error submitting ticket:", err)
       Toast.show("Failed to submit ticket", { duration: Toast.durations.SHORT })
@@ -311,196 +298,203 @@ const handleAudio = async () => {
   }
 
   return (
-<SafeAreaView style={styles.safeArea}>
-  <ScrollView
-    style={styles.container}
-    contentContainerStyle={[
-      styles.content,
-      { paddingBottom: 85 + keyboardHeight },
-    ]}
-    keyboardDismissMode="interactive"
-    keyboardShouldPersistTaps="handled"
-    scrollEnabled={!showMachineSuggestions}
-    nestedScrollEnabled
-  >
-    {/* 👇 THIS is important */}
-    <Pressable onPress={Keyboard.dismiss}></Pressable>
-      <View style={styles.card}>
-        <Text style={styles.title}>New Service Request</Text>
-        <Text style={styles.helper}>
-          Provide details about your issue to help us resolve it faster.
-        </Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 85 + keyboardHeight },
+        ]}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={!showMachineSuggestions}
+        nestedScrollEnabled
+      >
+        <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
+          <View style={styles.card}>
+            <Text style={styles.title}>New Service Request</Text>
+            <Text style={styles.helper}>
+              Provide details about your issue to help us resolve it faster.
+            </Text>
 
-        {/* rest of your form stays EXACTLY the same */}
+            <Text style={styles.label}>Machine Model</Text>
+            <View style={[styles.fieldContainer, showMachineSuggestions && styles.fieldContainerRaised]}>
+              <View
+                style={[
+                  styles.select,
+                  { gap: 8 },
+                  !isMachineValid && machineQuery.length > 0 && styles.selectInvalid,
+                  showMachineSuggestions && styles.selectRaised,
+                ]}
+              >
+                <Ionicons name="search" size={16} color="#9AA0A6" />
+                <TextInput
+                  style={{ flex: 1, padding: 0, color: machineQuery ? "#222" : "#9AA0A6" }}
+                  placeholder={loadingMachines ? "Loading machines..." : "Machine Code..."}
+                  placeholderTextColor="#9AA0A6"
+                  value={machineQuery}
+                  onChangeText={(txt) => {
+                    setMachineQuery(txt)
+                    setShowMachineSuggestions(true)
+                    if (txt !== selectedMachine) setSelectedMachine("")
+                  }}
+                  onFocus={() => {
+                    setShowMachineSuggestions(true)
+                  }}
+                  onBlur={() => {}}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  blurOnSubmit={false}
+                />
+              </View>
 
+              {showMachineSuggestions && (
+                <View style={styles.suggestionsDropdown}>
+                  {filteredMachines.length > 0 ? (
+                    <ScrollView
+                      keyboardShouldPersistTaps="handled"
+                      keyboardDismissMode="on-drag"
+                      showsVerticalScrollIndicator
+                      persistentScrollbar
+                      style={{ maxHeight: DROPDOWN_MAX_HEIGHT }}
+                      contentContainerStyle={{ paddingVertical: 2 }}
+                    >
+                      {filteredMachines.map((m) => (
+                        <View key={m.id}>
+                          <TouchableOpacity
+                            style={[styles.inlineOption, { minHeight: OPTION_ROW_HEIGHT }]}
+                            onPress={() => {
+                              setSelectedMachine(m.machineCode)
+                              setMachineQuery(m.machineCode)
+                              setShowMachineSuggestions(false)
+                              Keyboard.dismiss()
+                            }}
+                          >
+                            <Text style={styles.inlineOptionText}>{m.machineCode}</Text>
+                          </TouchableOpacity>
+                          <View style={styles.inlineSeparator} />
+                        </View>
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.noResultsContainer}>
+                      <Ionicons name="search" size={16} color="#6b7280" />
+                      <Text style={styles.noResults}>No matches</Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
-          <Text style={styles.label}>Machine Model</Text>
-          <View style={[styles.fieldContainer, showMachineSuggestions && styles.fieldContainerRaised]}>
-            <View
-              style={[
-                styles.select,
-                { gap: 8 },
-                !isMachineValid && machineQuery.length > 0 && styles.selectInvalid,
-                showMachineSuggestions && styles.selectRaised,
-              ]}
-            >
-              <Ionicons name="search" size={16} color="#9AA0A6" />
-              <TextInput
-                style={{ flex: 1, padding: 0, color: machineQuery ? "#222" : "#9AA0A6" }}
-                placeholder={loadingMachines ? "Loading machines..." : "Machine Code..."}
-                placeholderTextColor="#9AA0A6"
-                value={machineQuery}
-                onChangeText={(txt) => {
-                  setMachineQuery(txt)
-                  setShowMachineSuggestions(true)
-                  if (txt !== selectedMachine) setSelectedMachine("")
-                }}
-                onFocus={() => {
-                  setShowMachineSuggestions(true)
-                }}
-                onBlur={() => {}}
-                autoCorrect={false}
-                autoCapitalize="none"
-                returnKeyType="done"
-                blurOnSubmit={false}
-              />
+              {!showMachineSuggestions && machineQuery.length > 0 && !isMachineValid && (
+                <Text style={styles.invalidHint}>Select a valid machine from the list</Text>
+              )}
             </View>
 
-            {showMachineSuggestions && (
-              <View style={styles.suggestionsDropdown}>
-                {filteredMachines.length > 0 ? (
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="on-drag"
-                    showsVerticalScrollIndicator
-                    persistentScrollbar
-                    style={{ maxHeight: DROPDOWN_MAX_HEIGHT }}
-                    contentContainerStyle={{ paddingVertical: 2 }}
-                  >
-                    {filteredMachines.map((m) => (
-                      <View key={m.id}>
-                        <TouchableOpacity
-                          style={[styles.inlineOption, { minHeight: OPTION_ROW_HEIGHT }]}
-                          onPress={() => {
-                            setSelectedMachine(m.machineCode)
-                            setMachineQuery(m.machineCode)
-                            setShowMachineSuggestions(false)
-                            Keyboard.dismiss()
-                          }}
-                        >
-                          <Text style={styles.inlineOptionText}>{m.machineCode}</Text>
-                        </TouchableOpacity>
-                        <View style={styles.inlineSeparator} />
-                      </View>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.noResultsContainer}>
-                    <Ionicons name="search" size={16} color="#6b7280" />
-                    <Text style={styles.noResults}>No matches</Text>
-                  </View>
-                )}
+            {selectedMachine ? (
+              <Text style={{ marginTop: 8, fontWeight: "700", color: "#222" }}>Machine: {selectedMachine}</Text>
+            ) : null}
+
+            <Text style={styles.label}>Description of Issue</Text>
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              placeholder="Describe the issue..."
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+              scrollEnabled={false}
+            />
+
+            <View style={styles.row}>
+              <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
+                <Ionicons name="camera" size={18} color="#2E86DE" />
+                <Text style={styles.actionText}>Upload Attachment</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                    styles.actionBtn, 
+                    recorderState.isRecording && { backgroundColor: '#ffebee', borderColor: '#ef5350' }
+                ]}
+                onPress={recorderState.isRecording ? stopRecording : handleAudio}
+              >
+                <Ionicons 
+                    name={recorderState.isRecording ? "square" : "mic"} 
+                    size={18} 
+                    color={recorderState.isRecording ? "#d32f2f" : "#2E86DE"} 
+                />
+                <Text style={[
+                    styles.actionText,
+                    recorderState.isRecording && { color: "#d32f2f" }
+                ]}>
+                    {recorderState.isRecording ? "Stop" : "Audio Input"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {showMediaOptions && (
+              <View style={styles.inlineDropdown}>
+                <TouchableOpacity style={styles.inlineOption} onPress={capturePhoto}>
+                  <Text style={styles.inlineOptionText}>Take Photo</Text>
+                </TouchableOpacity>
+                <View style={styles.inlineSeparator} />
+                <TouchableOpacity style={styles.inlineOption} onPress={captureVideo}>
+                  <Text style={styles.inlineOptionText}>Record Video</Text>
+                </TouchableOpacity>
+                <View style={styles.inlineSeparator} />
+                <TouchableOpacity style={styles.inlineOption} onPress={pickFromLibrary}>
+                  <Text style={styles.inlineOptionText}>Choose from Library</Text>
+                </TouchableOpacity>
               </View>
             )}
 
-            {!showMachineSuggestions && machineQuery.length > 0 && !isMachineValid && (
-              <Text style={styles.invalidHint}>Select a valid machine from the list</Text>
+            {attachments.length > 0 && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.label}>Preview</Text>
+                <View style={styles.previewGrid}>
+                  {attachments.map((a, idx) => (
+                    <View key={`${a.uri}-${idx}`} style={styles.previewItem}>
+                      {a.type === "image" ? (
+                        <Pressable onPress={() => { setViewerMedia({ type: "image", uri: a.uri }); setViewerVisible(true) }}>
+                          <Image source={{ uri: a.uri }} style={styles.previewImage} contentFit="cover" />
+                        </Pressable>
+                      ) : a.type === "video" ? (
+                        <VideoPreview uri={a.uri} onPress={() => { setViewerMedia({ type: "video", uri: a.uri }); setViewerVisible(true) }} />
+                      ) : (
+                        <AudioPlayer uri={a.uri} durationMs={a.durationMs} />
+                      )}
+                      <TouchableOpacity style={styles.removeBadge} onPress={() => removeAttachment(idx)}>
+                        <Ionicons name="close" size={14} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
-          </View>
 
-          {/* Display selected machine (optional visual feedback) */}
-          {selectedMachine ? (
-            <Text style={{ marginTop: 8, fontWeight: "700", color: "#222" }}>Machine: {selectedMachine}</Text>
-          ) : null}
-
-          <Text style={styles.label}>Description of Issue</Text>
-          <TextInput
-          style={[styles.input, styles.textarea]}
-          placeholder="Describe the issue..."
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={5}
-          textAlignVertical="top"
-          scrollEnabled={false}
-          />
-
-
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.actionBtn} onPress={handleUpload}>
-              <Ionicons name="camera" size={18} color="#2E86DE" />
-              <Text style={styles.actionText}>Upload Attachment</Text>
-            </TouchableOpacity>
             <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={recorderState.isRecording ? stopRecording : handleAudio}
+              style={[styles.submitBtn, (!selectedMachine || !description.trim()) && styles.submitBtnDisabled]}
+              onPress={handleSubmit}
+              disabled={!selectedMachine || !description.trim()}
             >
-              <Ionicons name="mic" size={18} color="#2E86DE" />
-              <Text style={styles.actionText}>{recorderState.isRecording ? "Stop" : "Audio Input"}</Text>
+              <Text style={styles.submitText}>Submit Request</Text>
             </TouchableOpacity>
+
+            <MediaViewer visible={viewerVisible} media={viewerMedia} onClose={() => setViewerVisible(false)} />
           </View>
-
-          {showMediaOptions && (
-            <View style={styles.inlineDropdown}>
-              <TouchableOpacity style={styles.inlineOption} onPress={capturePhoto}>
-                <Text style={styles.inlineOptionText}>Take Photo</Text>
-              </TouchableOpacity>
-              <View style={styles.inlineSeparator} />
-              <TouchableOpacity style={styles.inlineOption} onPress={captureVideo}>
-                <Text style={styles.inlineOptionText}>Record Video</Text>
-              </TouchableOpacity>
-              <View style={styles.inlineSeparator} />
-              <TouchableOpacity style={styles.inlineOption} onPress={pickFromLibrary}>
-                <Text style={styles.inlineOptionText}>Choose from Library</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {attachments.length > 0 && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.label}>Preview</Text>
-              <View style={styles.previewGrid}>
-                {attachments.map((a, idx) => (
-                  <View key={`${a.uri}-${idx}`} style={styles.previewItem}>
-                    {a.type === "image" ? (
-                      <Pressable onPress={() => { setViewerMedia({ type: "image", uri: a.uri }); setViewerVisible(true) }}>
-                        <Image source={{ uri: a.uri }} style={styles.previewImage} contentFit="cover" />
-                      </Pressable>
-                    ) : a.type === "video" ? (
-                      <VideoPreview uri={a.uri} onPress={() => { setViewerMedia({ type: "video", uri: a.uri }); setViewerVisible(true) }} />
-                    ) : (
-                      <AudioPlayer uri={a.uri} durationMs={a.durationMs} />
-                    )}
-                    <TouchableOpacity style={styles.removeBadge} onPress={() => removeAttachment(idx)}>
-                      <Ionicons name="close" size={14} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.submitBtn, (!selectedMachine || !description.trim()) && styles.submitBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={!selectedMachine || !description.trim()}
-          >
-            <Text style={styles.submitText}>Submit Request</Text>
-          </TouchableOpacity>
-
-          <MediaViewer visible={viewerVisible} media={viewerMedia} onClose={() => setViewerVisible(false)} />
-        </View>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   )
 }
 
-/* ---------------- styles and helper components remain unchanged ---------------- */
+/* ---------------- styles and helper components ---------------- */
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#E8ECF5" },
   container: { flex: 1 },
-  content: { padding: 18, paddingTop: 60, paddingBottom: 85 },
+  content: { padding: 18, paddingTop: 20, paddingBottom: 85 }, // adjusted top padding for SafeAreaView
   card: {
     backgroundColor: "#fff",
     borderRadius: 24,

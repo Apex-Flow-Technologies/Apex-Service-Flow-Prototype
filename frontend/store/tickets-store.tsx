@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Ticket, subscribeToTickets } from './data/tickets';
+import { Ticket, subscribeToTickets } from '@/data/tickets';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
+import { db } from '../firebaseConfig';
 
 /* ---------------- CONTEXT TYPE ---------------- */
 

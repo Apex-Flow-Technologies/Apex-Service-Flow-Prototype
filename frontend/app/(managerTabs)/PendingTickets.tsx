@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useTickets } from './tickets-store';
-import { Ticket } from './data/tickets';
+import { useTickets } from '../../store/tickets-store';
+import { Ticket } from '../../data/tickets';
 
 /* 🔒 NO ASSIGNED TAB */
 const FILTER_TABS = ['New', 'In Progress', 'Closed'] as const;

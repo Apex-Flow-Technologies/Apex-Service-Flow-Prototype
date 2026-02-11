@@ -5,42 +5,45 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Pressable,
 } from 'react-native';
+// ✅ FIX 1: Use the correct SafeAreaView library
+import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useAudioPlayer } from 'expo-audio';
-import { db } from '../../../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { Ticket } from '../data/tickets';
-import { useTickets } from '../tickets-store';
-import { fetchTechnicians, Technician } from '../data/technicians';
+// ✅ FIX 2: Fixed imports using '@/' to point to the root folders
+// This ensures the app finds the files you moved to the 'data' and 'store' folders.
+import { db } from '@/firebaseConfig'; 
+import { Ticket } from '@/data/tickets';
+import { useTickets } from '@/store/tickets-store';
+import { fetchTechnicians, Technician } from '@/data/technicians';
 
 export const href = null;
 
 /* ---------------- STATUS MAPS ---------------- */
 
-const statusColor: Record<Ticket['status'] | 'declined', string> = {
+const statusColor: Record<string, string> = { // Changed to string to be safer
   New: '#d32f2f',
   Assigned: '#7b1fa2',
   'In Progress': '#2E86DE',
   'Waiting for Confirmation': '#f59e0b',
   Closed: '#43A047',
-  declined: '#D32F2F', // ✅ REQUIRED
+  declined: '#D32F2F', 
 };
 
-const statusIcon: Record<Ticket['status'] | 'declined', string> = {
+const statusIcon: Record<string, string> = {
   New: 'alert-circle',
   Assigned: 'person-add',
   'In Progress': 'sync',
   'Waiting for Confirmation': 'time',
   Closed: 'checkmark-circle',
-  declined: 'close-circle', // ✅ REQUIRED
+  declined: 'close-circle', 
 };
 
 /* ------------------------------------------------ */
@@ -91,11 +94,18 @@ export default function ManagerTicketDetails() {
 
   useEffect(() => {
     if (!ticket) {
-      router.replace('/(managerTabs)/PendingTickets');
+      // Optional: Handle case where ticket is not found in store yet
+      // router.replace('/(managerTabs)/PendingTickets');
     }
   }, [ticket]);
 
-  if (!ticket) return null;
+  if (!ticket) return (
+    <SafeAreaView style={styles.safeArea}>
+        <View style={{flex:1, justifyContent:'center', alignItems:'center'}}>
+            <Text>Loading Ticket...</Text>
+        </View>
+    </SafeAreaView>
+  );
 
   const isDeclined = ticket.status === 'declined';
 
@@ -144,7 +154,7 @@ export default function ManagerTicketDetails() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.headerRow}>
           <TouchableOpacity
@@ -159,9 +169,10 @@ export default function ManagerTicketDetails() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.ticketId}>{ticket.ticketId}</Text>
-            <View style={[styles.badge, { backgroundColor: statusColor[ticket.status] }]}>
+            {/* ✅ FIX 3: Safe access to status color/icon */}
+            <View style={[styles.badge, { backgroundColor: statusColor[ticket.status] || '#999' }]}>
               <Ionicons
-                name={statusIcon[ticket.status] as any}
+                name={(statusIcon[ticket.status] || 'help-circle') as any}
                 size={14}
                 color="#fff"
                 style={{ marginRight: 4 }}
@@ -215,85 +226,84 @@ export default function ManagerTicketDetails() {
         </View>
 
         {(ticket.status === 'New' || isDeclined) && (
-  <View style={styles.actionCard}>
-    <View style={styles.actionCardHeader}>
-      <Ionicons name="person-add-outline" size={24} color="#2E86DE" />
-      <Text style={styles.actionCardTitle}>
-        {isDeclined ? 'Reassign Technician' : 'Assign Technician'}
-      </Text>
-    </View>
+          <View style={styles.actionCard}>
+            <View style={styles.actionCardHeader}>
+              <Ionicons name="person-add-outline" size={24} color="#2E86DE" />
+              <Text style={styles.actionCardTitle}>
+                {isDeclined ? 'Reassign Technician' : 'Assign Technician'}
+              </Text>
+            </View>
 
-    <Text style={styles.actionCardDescription}>
-      {isDeclined
-        ? 'Assign this ticket to another technician.'
-        : 'Assign this ticket to a technician to begin work.'}
-    </Text>
-<View style={styles.dropdownWrapper} ref={dropdownRef}>
-  <Pressable
-    style={[
-      styles.dropdownButton,
-      dropdownOpen && styles.dropdownButtonOpen,
-    ]}
-    onPress={() => setDropdownOpen(!dropdownOpen)}
-  >
-    <View style={styles.dropdownButtonContent}>
-      <Ionicons
-        name="construct-outline"
-        size={20}
-        color={selectedTechnician ? '#212121' : '#8A8A8A'}
-        style={styles.inputIcon}
-      />
-      <Text
-        style={[
-          styles.dropdownButtonText,
-          !selectedTechnician && styles.dropdownButtonPlaceholder,
-        ]}
-      >
-        {selectedTechnician
-          ? selectedTechnician.name
-          : 'Select a technician'}
-      </Text>
-    </View>
+            <Text style={styles.actionCardDescription}>
+              {isDeclined
+                ? 'Assign this ticket to another technician.'
+                : 'Assign this ticket to a technician to begin work.'}
+            </Text>
+            <View style={styles.dropdownWrapper} ref={dropdownRef}>
+              <Pressable
+                style={[
+                  styles.dropdownButton,
+                  dropdownOpen && styles.dropdownButtonOpen,
+                ]}
+                onPress={() => setDropdownOpen(!dropdownOpen)}
+              >
+                <View style={styles.dropdownButtonContent}>
+                  <Ionicons
+                    name="construct-outline"
+                    size={20}
+                    color={selectedTechnician ? '#212121' : '#8A8A8A'}
+                    style={styles.inputIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.dropdownButtonText,
+                      !selectedTechnician && styles.dropdownButtonPlaceholder,
+                    ]}
+                  >
+                    {selectedTechnician
+                      ? selectedTechnician.name
+                      : 'Select a technician'}
+                  </Text>
+                </View>
 
-    <Ionicons
-      name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
-      size={20}
-      color="#8A8A8A"
-    />
-  </Pressable>
+                <Ionicons
+                  name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color="#8A8A8A"
+                />
+              </Pressable>
 
-  {dropdownOpen && (
-    <View style={styles.dropdownList}>
-      <ScrollView style={{ maxHeight: 250 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-        {technicians.map(item => (
-          <TouchableOpacity
-            key={item.username}
-            style={[
-              styles.dropdownItem,
-              selectedTechnician?.username === item.username &&
-                styles.dropdownItemSelected,
-            ]}
-            onPress={() => {
-              setSelectedTechnician(item);
-              setDropdownOpen(false);
-            }}
-          >
-            <Text style={styles.dropdownItemName}>{item.name}</Text>
+              {dropdownOpen && (
+                <View style={styles.dropdownList}>
+                  <ScrollView style={{ maxHeight: 250 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {technicians.map(item => (
+                      <TouchableOpacity
+                        key={item.username}
+                        style={[
+                          styles.dropdownItem,
+                          selectedTechnician?.username === item.username &&
+                            styles.dropdownItemSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedTechnician(item);
+                          setDropdownOpen(false);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemName}>{item.name}</Text>
 
-            {selectedTechnician?.username === item.username && (
-              <Ionicons
-                name="checkmark-circle"
-                size={20}
-                color="#2E86DE"
-              />
-            )}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  )}
-</View>
-
+                        {selectedTechnician?.username === item.username && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={20}
+                            color="#2E86DE"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleAssign}>
               <Text style={styles.primaryButtonText}>
@@ -363,8 +373,7 @@ function AudioRow({ uri }: { uri: string }) {
   );
 }
 
-/* styles unchanged */
-
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -376,7 +385,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 18,
-    paddingTop: 50,
+    paddingTop: 10, // Reduced padding since SafeArea handles top
     paddingBottom: 100,
   },
   headerRow: {

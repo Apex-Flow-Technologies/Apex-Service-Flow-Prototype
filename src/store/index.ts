@@ -25,6 +25,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  username: string;
   role: "technician" | "manager";
   phone: string;
   status: "online" | "offline";
@@ -45,8 +46,8 @@ export interface Ticket {
   status: "new" | "assigned" | "in-progress" | "completed" | "declined";
   priority: "low" | "medium" | "high" | "urgent";
 
-  assigneeId: string | null;
-  assigneeName: string | null;
+  assignedToId: string | null;
+  assignedToName: string | null;
 
   location: string;
 
@@ -123,9 +124,9 @@ function formatTicket(docSnap: any): Ticket {
 
     priority: mapPriority(data.status),
 
-    assigneeId: data.assigneeId || null,
+    assignedToId: data.assignedToId || null,
 
-    assigneeName: data.assigneeName || null,
+    assignedToName: data.assignedToName || null,
 
     location: "xxxx",
 
@@ -232,35 +233,51 @@ export const useStore = create<AppState>((set, get) => ({
   ================================ */
 
   technicians: [],
-
-  fetchTechnicians: async () => {
-    try {
-      const q = query(
+fetchTechnicians: async () => {
+  try {
+    // Get users
+    const userSnap = await getDocs(
+      query(
         collection(db, "user"),
         where("role", "in", ["technician", "manager"])
-      );
+      )
+    );
 
-      const snap = await getDocs(q);
+    // Get tickets and format them
+    const ticketSnap = await getDocs(collection(db, "tickets"));
+    const tickets: Ticket[] = ticketSnap.docs.map(formatTicket);
 
-      const users: User[] = snap.docs.map((d) => {
-        const data = d.data() as any;
+    const users: User[] = userSnap.docs.map((d) => {
+      const data = d.data() as any;
+      const userId = d.id;
 
-        return {
-          id: d.id,
-          name: data.name,
-          email: data.email,
-          role: data.role,
-          phone: data.phone || "",
-          status: data.status || "offline",
-          activeJobs: data.activeJobs || 0,
-        };
-      });
+      const activeJobs = tickets.filter((t) => {
+        return (
+          t.assignedToId === data.username &&
+          t.status !== "completed" &&
+          t.status !== "declined"
+        );
+      }).length;
 
-      set({ technicians: users });
-    } catch (err) {
-      console.error("Fetch technicians error:", err);
-    }
-  },
+      return {
+        id: userId,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        phone: data.phone || "",
+        status: data.status || "offline",
+        username: data.username || "",
+        activeJobs,
+      };
+    });
+
+    set({ technicians: users });
+
+  } catch (err) {
+    console.error("Fetch technicians error:", err);
+  }
+},
+
 
   addTechnician: async (tech) => {
     try {
@@ -371,8 +388,8 @@ export const useStore = create<AppState>((set, get) => ({
 
       await updateDoc(doc(db, "tickets", ticketId), {
         status: "assigned",
-        assigneeId: technicianId,
-        assigneeName: tech.name,
+        assignedToId: technicianId,
+        assignedToName: tech.name,
         updatedAt: new Date(),
       });
 
@@ -389,8 +406,8 @@ export const useStore = create<AppState>((set, get) => ({
             ? {
                 ...t,
                 status: "assigned",
-                assigneeId: technicianId,
-                assigneeName: tech.name,
+                assignedToId: technicianId,
+                assignedToName: tech.name,
               }
             : t
         ),

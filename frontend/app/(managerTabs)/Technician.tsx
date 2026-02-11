@@ -29,7 +29,10 @@ interface Technician {
 // Stable color from username (same user → same color)
 const AVATAR_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-const getColorFromUsername = (username: string) => {
+// ✅ FIX 1: Added safety check for undefined username
+const getColorFromUsername = (username: string | null | undefined) => {
+  if (!username) return '#CCCCCC'; // Default grey if no username
+
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
     hash = username.charCodeAt(i) + ((hash << 5) - hash);
@@ -52,47 +55,51 @@ export default function TechniciansScreen() {
   const [newName, setNewName] = useState('');
   const [newSpecialty, setNewSpecialty] = useState('');
 
-  /* ---------------- FETCH DATA (A1) ---------------- */
+  /* ---------------- FETCH DATA ---------------- */
 
   useEffect(() => {
     const fetchData = async () => {
-      // 1️⃣ Fetch technicians
-      const usersSnap = await getDocs(collection(db, 'user'));
-      const techs = usersSnap.docs
-        .map(doc => doc.data())
-        .filter(u => u.role === 'technician')
-        .map(u => ({
-          username: u.username,
-          name: u.name,
-          specialty: u.specialty ?? 'General',
-          activeTickets: 0,
+      try {
+        // 1️⃣ Fetch technicians
+        const usersSnap = await getDocs(collection(db, 'user'));
+        
+        const techs = usersSnap.docs
+          .map(doc => doc.data())
+          // ✅ FIX 2: Filter out users without a username to prevent crashes
+          .filter(u => u.role === 'technician' && u.username) 
+          .map(u => ({
+            username: u.username,
+            name: u.name || 'Unknown Technician', // Fallback name
+            specialty: u.specialty ?? 'General',
+            activeTickets: 0,
+          }));
+
+        // 2️⃣ Fetch tickets ONCE
+        const ticketsSnap = await getDocs(collection(db, 'tickets'));
+        const activeTickets = ticketsSnap.docs
+          .map(doc => doc.data())
+          .filter(
+            t =>
+              t.assignedToId &&
+              (t.status === 'in progress' ||
+                t.status === 'waiting_for_confirmation')
+          );
+
+        // 3️⃣ Count active tickets per technician
+        const withCounts = techs.map(tech => ({
+          ...tech,
+          activeTickets: activeTickets.filter(
+            t => t.assignedToId === tech.username
+          ).length,
         }));
 
-      // 2️⃣ Fetch tickets ONCE
-      const ticketsSnap = await getDocs(collection(db, 'tickets'));
-      const activeTickets = ticketsSnap.docs
-        .map(doc => doc.data())
-        .filter(
-          t =>
-            t.assignedToId &&
-            (t.status === 'in progress' ||
-              t.status === 'waiting_for_confirmation')
-        );
-
-      // 3️⃣ Count active tickets per technician
-      const withCounts = techs.map(tech => ({
-        ...tech,
-        activeTickets: activeTickets.filter(
-          t => t.assignedToId === tech.username
-        ).length,
-      }));
-
-      setTechnicians(withCounts);
+        setTechnicians(withCounts);
+      } catch (err) {
+        console.error('Failed to load technicians', err);
+      }
     };
 
-    fetchData().catch(err =>
-      console.error('Failed to load technicians', err)
-    );
+    fetchData();
   }, []);
 
   /* ---------------- SEARCH ---------------- */
@@ -101,10 +108,11 @@ export default function TechniciansScreen() {
     if (!searchQuery) return technicians;
 
     const q = searchQuery.toLowerCase();
+    // ✅ FIX 3: Safety checks inside filter
     return technicians.filter(
       tech =>
-        tech.name.toLowerCase().includes(q) ||
-        tech.specialty.toLowerCase().includes(q)
+        (tech.name || '').toLowerCase().includes(q) ||
+        (tech.specialty || '').toLowerCase().includes(q)
     );
   }, [searchQuery, technicians]);
 
@@ -162,6 +170,7 @@ export default function TechniciansScreen() {
         </View>
 
         {filteredTechnicians.map(tech => {
+          // This function is now safe to call even if username is weird
           const bgColor = getColorFromUsername(tech.username);
 
           return (
@@ -258,7 +267,7 @@ export default function TechniciansScreen() {
   );
 }
 
-/* ---------------- STYLES (UNCHANGED + AVATAR) ---------------- */
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#E8ECF5' },
@@ -371,7 +380,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   searchContainer: {
-  marginBottom: 18,
-},
-
+    marginBottom: 18,
+  },
 });

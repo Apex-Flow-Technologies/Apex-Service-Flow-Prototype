@@ -103,6 +103,7 @@ export default function Customers() {
     phone: "",
     address: "",
     username: "",
+    password: "", // Added password field for editing
   });
 
   // Bulk Upload State
@@ -153,12 +154,13 @@ export default function Customers() {
   // 1. Handle Edit Click - ROBUST MAPPING
   const handleEditClick = (customer: any) => {
     setEditCustomer(customer);
-    // Explicitly map fields, default to empty string if undefined (fixes "older customer" issue)
+    // Explicitly map fields, default to empty string if undefined
     setEditForm({
       name: customer.name || "",
       phone: customer.phone || "",
       address: customer.address || "",
-      username: customer.username || "", // Ensures username is grabbed
+      username: customer.username || "",
+      password: "", // Reset password field on open
     });
   };
 
@@ -170,17 +172,25 @@ export default function Customers() {
     try {
       // Update Backend
       const docRef = doc(db, "user", editCustomer.id);
-      await updateDoc(docRef, {
+      
+      const updateData: any = {
         name: editForm.name,
         phone: editForm.phone,
         address: editForm.address,
         username: editForm.username,
-      });
+      };
+
+      // Only update password if the user typed something
+      if (editForm.password.trim() !== "") {
+        updateData.password = editForm.password;
+      }
+
+      await updateDoc(docRef, updateData);
 
       // Update Local State (Immediate UI change)
       setCustomers((prev) =>
         prev.map((c) =>
-          c.id === editCustomer.id ? { ...c, ...editForm } : c
+          c.id === editCustomer.id ? { ...c, ...updateData } : c
         )
       );
 
@@ -251,8 +261,6 @@ export default function Customers() {
   };
 
   const deleteCustomer = async (customer: any) => {
-    // REMOVED CONFIRMATION POPUP HERE
-    
     // Unassign all machines locally first
     setMachines(prev => prev.map(m => m.assignedTo === customer.id ? { ...m, assignedTo: null } : m));
     
@@ -335,7 +343,6 @@ export default function Customers() {
                 filteredCustomers.map((c) => (
                   <TableRow key={c.id} className="hover:bg-muted/30">
                     <TableCell className="font-medium">{c.name}</TableCell>
-                    {/* CHANGED: Removed dim styling to make it visible like phone number */}
                     <TableCell>{c.username || "-"}</TableCell>
                     <TableCell>{c.phone || "-"}</TableCell>
                     <TableCell>
@@ -388,7 +395,13 @@ export default function Customers() {
                 <Label>Phone</Label>
                 <div className="relative">
                     <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input className="pl-9" placeholder="+1 234..." value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} />
+                    <Input 
+                        className="pl-9" 
+                        placeholder="9876543210" 
+                        value={form.phone} 
+                        // Only allow numbers
+                        onChange={(e) => setForm({...form, phone: e.target.value.replace(/\D/g, '')})} 
+                    />
                 </div>
               </div>
             </div>
@@ -447,7 +460,13 @@ export default function Customers() {
                     <Label htmlFor="edit-phone">Phone Number</Label>
                     <div className="relative">
                         <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input id="edit-phone" className="pl-9" value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} />
+                        <Input 
+                            id="edit-phone" 
+                            className="pl-9" 
+                            value={editForm.phone} 
+                            // Only allow numbers
+                            onChange={(e) => setEditForm({...editForm, phone: e.target.value.replace(/\D/g, '')})} 
+                        />
                     </div>
                 </div>
             </div>
@@ -461,12 +480,27 @@ export default function Customers() {
                 </div>
             </div>
 
-            {/* 3. Username */}
-            <div className="space-y-2">
-                <Label htmlFor="edit-username">App Username</Label>
-                <div className="relative">
-                    <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input id="edit-username" className="pl-9" value={editForm.username} onChange={(e) => setEditForm({...editForm, username: e.target.value})} />
+            {/* 3. Username & Password */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="edit-username">App Username</Label>
+                    <div className="relative">
+                        <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input id="edit-username" className="pl-9" value={editForm.username} onChange={(e) => setEditForm({...editForm, username: e.target.value})} />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="edit-password">New Password</Label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            id="edit-password" 
+                            className="pl-9" 
+                            placeholder="Leave empty to keep current" 
+                            value={editForm.password} 
+                            onChange={(e) => setEditForm({...editForm, password: e.target.value})} 
+                        />
+                    </div>
                 </div>
             </div>
 

@@ -3,46 +3,46 @@
 
 // @ts-nocheck
 
-import { useState, useMemo, useEffect } from "react"
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useMemo, useState } from "react";
 
+import { Ionicons } from "@expo/vector-icons";
+import { RecordingPresets, useAudioPlayer, useAudioRecorder, useAudioRecorderState } from "expo-audio";
+import { Audio } from "expo-av";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import { VideoView, useVideoPlayer } from "expo-video";
 import {
-  View,
-  Text,
+  Dimensions,
+  Keyboard,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  Keyboard,
-  Pressable,
-  Modal,
-  Dimensions,
-} from "react-native"
-import Toast from "react-native-root-toast"
-import { Ionicons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
-import * as ImagePicker from "expo-image-picker"
-import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, RecordingPresets } from "expo-audio"
-import { VideoView, useVideoPlayer } from "expo-video"
-import { Image } from "expo-image"
-import { Audio } from "expo-av"
+  View,
+} from "react-native";
+import Toast from "react-native-root-toast";
 
 // FIRESTORE
-import { db, auth } from "../../firebaseConfig"
 import {
-  collection,
-  getDocs,
-  query,
-  where,
   addDoc,
-  serverTimestamp,
+  collection,
   doc,
   getDoc,
+  getDocs,
+  increment,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  increment,
-} from "firebase/firestore"
+  where,
+} from "firebase/firestore";
+import { db } from "../../firebaseConfig";
 
 const OPTION_ROW_HEIGHT = 48
 const { height: WINDOW_HEIGHT } = Dimensions.get("window")
@@ -157,42 +157,61 @@ export default function RaiseTicket() {
     setAttachments((prev) => [...prev, { type: "video", uri: asset.uri }])
   }
 
-  const handleAudio = async () => {
-    try {
-      // Ensure microphone permissions
-      const perm = await Audio.requestPermissionsAsync()
-      if (!perm.granted) {
-        Toast.show("Microphone permission is required", { duration: Toast.durations.SHORT })
-        return
-      }
-
-      // Ensure audio mode allows recording (iOS especially)
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
-
-      if (recorderState.isRecording) {
-        await stopRecording()
-        return
-      }
-      await audioRecorder.prepareToRecordAsync()
-      audioRecorder.record()
-      Toast.show("Recording... tap mic again to stop", { duration: Toast.durations.SHORT })
-    } catch (e) {
-      Toast.show("Failed to record audio", { duration: Toast.durations.SHORT })
+const handleAudio = async () => {
+  try {
+    // Ask permission
+    const perm = await Audio.requestPermissionsAsync()
+    if (!perm.granted) {
+      Toast.show("Microphone permission is required", { duration: Toast.durations.SHORT })
+      return
     }
+
+    // VERY IMPORTANT for iOS — enable recording mode BEFORE recording
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+    })
+
+    if (recorderState.isRecording) {
+      await stopRecording()
+      return
+    }
+
+    await audioRecorder.prepareToRecordAsync()
+    await audioRecorder.record()
+
+    Toast.show("Recording... tap mic again to stop", { duration: Toast.durations.SHORT })
+  } catch (e) {
+    console.log("Audio error:", e)
+    Toast.show("Failed to record audio", { duration: Toast.durations.SHORT })
   }
+}
+
+
 
   const stopRecording = async () => {
-    try {
-      await audioRecorder.stop()
-      const uri = audioRecorder.uri
-      if (uri) {
-        setAttachments((prev) => [...prev, { type: "audio", uri, durationMs: recorderState.durationMillis }])
-        Toast.show("Recording saved", { duration: Toast.durations.SHORT })
-      }
-    } catch (e) {
-      Toast.show("Failed to stop recording", { duration: Toast.durations.SHORT })
+  try {
+    await audioRecorder.stop()
+
+    // IMPORTANT — reset iOS audio mode after recording
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+    })
+
+    const uri = audioRecorder.uri
+    if (uri) {
+      setAttachments((prev) => [
+        ...prev,
+        { type: "audio", uri, durationMs: recorderState.durationMillis },
+      ])
+      Toast.show("Recording saved", { duration: Toast.durations.SHORT })
     }
+  } catch (e) {
+    console.log("Stop error:", e)
+    Toast.show("Failed to stop recording", { duration: Toast.durations.SHORT })
   }
+}
+
 
   const removeAttachment = (idx: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== idx))

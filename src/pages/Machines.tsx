@@ -2,7 +2,17 @@ import {
   collection, 
   getDocs, 
   doc, 
-  updateDoc 
+  updateDoc,
+  addDoc,
+  deleteDoc,
+  query, 
+  orderBy,
+  limit,
+  startAfter,
+  serverTimestamp,
+  QueryDocumentSnapshot,
+  DocumentData,
+  where
 } from "firebase/firestore";
 import { db } from "@/firebase";
 
@@ -16,7 +26,13 @@ import {
   Upload, 
   Hash, 
   Tag, 
-  FileSpreadsheet 
+  FileSpreadsheet,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -26,16 +42,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 import {
-  fetchMachines,
-  addMachine as addMachineToDB,
-  deleteMachine as deleteMachineFromDB,
-} from "@/services/machines";
-
-import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardFooter
 } from "@/components/ui/card";
 
 import {
@@ -52,6 +63,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 
 import {
@@ -65,6 +78,8 @@ import {
 } from "@/components/ui/dialog";
 
 import { useToast } from "@/hooks/use-toast";
+
+const PAGE_SIZE = 50;
 
 /* -------------------------------------------------------------------------- */
 /* TYPES */
@@ -80,25 +95,27 @@ type Machine = {
 
 type UploadRow = {
   machineCode: string;
-  customerName: string;
-  customerId: string | null;
+  legacyId: string;
+  customerName: string; 
+  matchedCustomerName: string | null;
+  customerId: string | null; 
   valid: boolean;
-  error?: string;
-};
-
-type UserDoc = {
-  id: string;
-  name: string;
+  statusMessage: string;
+  statusType: "success" | "warning" | "error";
+  machineNo: string;
+  year: string;
+  machineType: string;
 };
 
 /* -------------------------------------------------------------------------- */
 /* HELPERS */
 /* -------------------------------------------------------------------------- */
 
-const normalize = (v: string) => v?.trim().toLowerCase();
-
-const extractSerial = (machineCode: string) =>
-  machineCode.split("|")[0].trim().toLowerCase();
+const extractSerial = (machineCode: string) => {
+  if (!machineCode) return "";
+  const parts = machineCode.split("|");
+  return parts[0].trim().toLowerCase();
+};
 
 const normalizeStatus = (status: any): "Online" | "Offline" =>
   typeof status === "string" && status.toLowerCase() === "online"
@@ -107,43 +124,16 @@ const normalizeStatus = (status: any): "Online" | "Offline" =>
 
 const statusBadgeClass = (status: "Online" | "Offline") =>
   status === "Online"
-    ? "bg-green-600 text-white"
-    : "bg-slate-400 text-white";
+    ? "bg-green-600 text-white hover:bg-green-700"
+    : "bg-slate-400 text-white hover:bg-slate-500";
 
-/* FORMATTER FOR SERIAL INPUT (00-00-00) */
 const formatSerialInput = (val: string) => {
-  const digits = val.replace(/\D/g, "").slice(0, 6);
-  let out = "";
-  if (digits.length >= 1) out += digits.slice(0, 2);
-  if (digits.length >= 3) out += "-" + digits.slice(2, 4);
-  if (digits.length >= 5) out += "-" + digits.slice(4, 6);
-  return out;
+  return val; 
 };
 
-const isValidMachineCode = (code: string) =>
-  /^\d{2}-\d{2}-\d{2} \| .+$/i.test(code);
-
-/* -------------------------------------------------------------------------- */
-/* FIRESTORE HELPERS */
-/* -------------------------------------------------------------------------- */
-
-const fetchUsersDirect = async (): Promise<UserDoc[]> => {
-  const snap = await getDocs(collection(db, "user"));
-  return snap.docs.map((d) => ({
-    id: d.id,
-    name: d.data().name,
-  }));
-};
-
-const fetchExistingMachineCodes = async (): Promise<Set<string>> => {
-  const machines = await fetchMachines();
-  return new Set(
-    machines
-      .map((m: any) => m.machineCode)
-      .filter(Boolean)
-      .map((c: string) => extractSerial(c))
-  );
-};
+const isValidMachineCode = (code: string) => {
+    return code.includes("|"); 
+}
 
 /* -------------------------------------------------------------------------- */
 /* COMPONENT */
@@ -153,7 +143,17 @@ export default function Machines() {
   const { toast } = useToast();
 
   const [machines, setMachines] = useState<Machine[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [users, setUsers] = useState<any[]>([]); 
+  const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Pagination & Sort State
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [pageHistory, setPageHistory] = useState<QueryDocumentSnapshot<DocumentData>[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [sortField, setSortField] = useState<string>("machineCode");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // Add Dialog State
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -169,71 +169,184 @@ export default function Machines() {
   const [uploadRows, setUploadRows] = useState<UploadRow[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
-  const [skippedRows, setSkippedRows] = useState<UploadRow[]>([]);
-  const [showSkippedDialog, setShowSkippedDialog] = useState(false);
 
-  /* LOAD MACHINES */
-  const loadMachines = async () => {
-    const data = await fetchMachines();
-    setMachines(
-      data.map((m: any) => ({
+  /* LOAD DATA - PAGINATED */
+  const fetchFirstPage = async () => {
+    setIsLoading(true);
+    try {
+      const q = query(
+        collection(db, "machines"),
+        orderBy(sortField, sortDir),
+        limit(PAGE_SIZE)
+      );
+      const snap = await getDocs(q);
+      
+      setMachines(snap.docs.map((m: any) => ({
+          id: m.id,
+          ...m.data(),
+          status: normalizeStatus(m.data().status),
+        })));
+        
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setPageHistory([]);
+      setPage(1);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch (error) {
+      console.error("Error loading machines:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchNextPage = async () => {
+    if (!lastDoc) return;
+    setIsLoading(true);
+    try {
+      const q = query(
+        collection(db, "machines"),
+        orderBy(sortField, sortDir),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        setPageHistory(prev => [...prev, lastDoc]);
+        setMachines(snap.docs.map((m: any) => ({
+            id: m.id,
+            ...m.data(),
+            status: normalizeStatus(m.data().status),
+          })));
+        setLastDoc(snap.docs[snap.docs.length - 1]);
+        setPage(p => p + 1);
+        setHasMore(snap.docs.length === PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Error fetching next page:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchPrevPage = async () => {
+    if (page === 1 || pageHistory.length === 0) return;
+    setIsLoading(true);
+    try {
+      const newHistory = pageHistory.slice(0, -1);
+      let q;
+      if (newHistory.length === 0) {
+         q = query(
+            collection(db, "machines"),
+            orderBy(sortField, sortDir),
+            limit(PAGE_SIZE)
+         );
+      } else {
+         const startDoc = newHistory[newHistory.length - 1];
+         q = query(
+            collection(db, "machines"),
+            orderBy(sortField, sortDir),
+            startAfter(startDoc),
+            limit(PAGE_SIZE)
+         );
+      }
+
+      const snap = await getDocs(q);
+      setMachines(snap.docs.map((m: any) => ({
         id: m.id,
-        machineCode: m.machineCode,
-        status: normalizeStatus(m.status),
-        assignedTo: m.assignedTo ?? null,
-        activeTicket: null,
-      }))
-    );
+        ...m.data(),
+        status: normalizeStatus(m.data().status),
+      })));
+      setLastDoc(snap.docs[snap.docs.length - 1]);
+      setPageHistory(newHistory);
+      setPage(p => p - 1);
+      setHasMore(true);
+    } catch (error) {
+      console.error("Error fetching prev page:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helper for duplicate check (load all only when needed)
+  const fetchAllMachinesForCheck = async () => {
+      const snap = await getDocs(collection(db, "machines"));
+      return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  }
+
+  // Load ALL users to match machine assignment (Users collection is generally smaller than machines, but eventually should be optimized)
+  // For now, loading all users to match names is acceptable if < 2000 users. 
+  const loadUsers = async () => {
+    try {
+      const snap = await getDocs(collection(db, "user"));
+      setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Error loading users:", error);
+    }
   };
 
   useEffect(() => {
-    loadMachines();
-  }, []);
+    fetchFirstPage();
+    loadUsers();
+  }, [sortField, sortDir]);
 
-  /* ADD MACHINE */
+  const getCustomerName = (id: string | null) => {
+      if(!id) return "Unassigned";
+      const u = users.find(user => user.id === id);
+      return u ? u.name : "Unknown User";
+  }
+
+  const handleSort = (field: string) => {
+      if (sortField === field) {
+          setSortDir(sortDir === "asc" ? "desc" : "asc");
+      } else {
+          setSortField(field);
+          setSortDir("asc");
+      }
+  }
+
+  /* ADD MACHINE (Manual) */
   const handleAddMachine = async () => {
     const fullCode = `${addForm.serial} | ${addForm.name}`;
 
     if (!isValidMachineCode(fullCode)) {
       toast({
         title: "Invalid format",
-        description: "Serial must be 6 digits and Name is required.",
+        description: "Must contain a '|' separator (e.g., 88-88-88 | Machine A)",
         variant: "destructive",
       });
       return;
     }
 
-    const existing = await fetchExistingMachineCodes();
-    const key = extractSerial(fullCode);
-
-    if (existing.has(key)) {
-      toast({
-        title: "Duplicate serial",
-        description: "This machine serial already exists",
-        variant: "destructive",
-      });
+    // Quick duplicate check on current page (for better check, we rely on backend rules or bulk check)
+    // For manual add, checking strictly against loaded data is a simple first step.
+    const newSerial = extractSerial(fullCode);
+    const isDup = machines.some(m => extractSerial(m.machineCode) === newSerial);
+    
+    if (isDup) {
+      toast({ title: "Duplicate Serial", variant: "destructive" });
       return;
     }
 
-    await addMachineToDB({
+    await addDoc(collection(db, "machines"), {
       machineCode: fullCode,
       assignedTo: null,
       status: "offline",
+      createdAt: serverTimestamp()
     });
 
     setIsAddDialogOpen(false);
     setAddForm({ serial: "", name: "" });
-    await loadMachines();
-
+    fetchFirstPage();
     toast({ title: "Machine Added" });
   };
 
   /* EDIT MACHINE HANDLERS */
   const handleEditClick = (machine: Machine) => {
-    // Parse existing "00-00-00 | Name"
     const parts = machine.machineCode.split("|");
     const serial = parts[0]?.trim() || "";
-    const name = parts.slice(1).join("|").trim() || ""; // Join rest in case name has |
+    const name = parts.slice(1).join("|").trim() || ""; 
 
     setEditMachineId(machine.id);
     setEditForm({ serial, name });
@@ -242,17 +355,7 @@ export default function Machines() {
 
   const handleUpdateMachine = async () => {
     if (!editMachineId) return;
-
     const fullCode = `${editForm.serial} | ${editForm.name}`;
-
-    if (!isValidMachineCode(fullCode)) {
-      toast({
-        title: "Invalid format",
-        description: "Serial must be 6 digits and Name is required.",
-        variant: "destructive",
-      });
-      return;
-    }
 
     try {
       const machineRef = doc(db, "machines", editMachineId);
@@ -263,31 +366,41 @@ export default function Machines() {
       setIsEditOpen(false);
       setEditMachineId(null);
       setEditForm({ serial: "", name: "" });
-      await loadMachines();
-
+      fetchFirstPage(); // Refresh to show updates
       toast({ title: "Machine Updated" });
     } catch (error) {
-      console.error("Update failed", error);
-      toast({
-        title: "Update failed",
-        description: "Could not update machine details.",
-        variant: "destructive",
-      });
+      toast({ title: "Update failed", variant: "destructive" });
     }
   };
 
-  /* DELETE */
   const handleDeleteMachine = async (id: string) => {
-    await deleteMachineFromDB(id);
-    await loadMachines();
-    toast({ title: "Machine Removed", variant: "destructive" });
+    if(!confirm("Are you sure?")) return;
+    try {
+        await deleteDoc(doc(db, "machines", id));
+        fetchFirstPage();
+        toast({ title: "Machine Removed" });
+    } catch (e) {
+        toast({ title: "Error deleting", variant: "destructive"});
+    }
   };
 
   /* BULK UPLOAD HANDLERS */
   const handleFileUpload = async (file: File) => {
-    const users = await fetchUsersDirect();
-    const existing = await fetchExistingMachineCodes();
-    const userMap = new Map(users.map((u) => [normalize(u.name), u]));
+    await loadUsers();
+    
+    // We need ALL machines to check duplicates accurately across the whole DB
+    const allMachines = await fetchAllMachinesForCheck();
+
+    // 1. Create Set of Existing IDs
+    const existingIds = new Set(allMachines.map((m: any) => extractSerial(m.machineCode)));
+    
+    // 2. Create User Lookup
+    const userLookup = new Map<string, any>();
+    users.forEach(u => {
+        if(u.legacyCustomerId) {
+            userLookup.set(String(u.legacyCustomerId).trim(), u);
+        }
+    });
 
     const data = await file.arrayBuffer();
     const workbook = XLSX.read(data);
@@ -295,98 +408,121 @@ export default function Machines() {
     const rows = XLSX.utils.sheet_to_json<any>(sheet);
 
     setUploadedCount(0);
-    setSkippedRows([]);
 
-    setUploadRows(
-      rows.map((row) => {
-        const machineCode = `${row["MACHINE NO"]}-${row["YEAR"]} | ${row["MACHINE TYPE"]}`;
-        const key = extractSerial(machineCode);
+    const seenInFile = new Set<string>();
 
-        if (existing.has(key)) {
-          return {
-            machineCode,
-            customerName: row["CUSTOMER NAME"],
-            customerId: null,
-            valid: false,
-            error: "Duplicate serial",
-          };
+    const processed = rows.map((row) => {
+        const machineNo = row["MACHINE NO"] || row["machine no"];
+        const year = row["YEAR"] || row["year"];
+        const machineType = row["MACHINE TYPE"] || row["machine type"];
+        const legacyId = row["legacyCustomerId"];
+        const customerNameExcel = row["CUSTOMER NAME"];
+
+        if (!machineNo || !machineType) return null;
+
+        const machineCode = `${machineNo}-${year} | ${machineType}`;
+        const idKey = extractSerial(machineCode); 
+        
+        let statusMessage = "";
+        let statusType: "success" | "warning" | "error" = "success";
+
+        // A. Check DB Duplicate
+        if (existingIds.has(idKey)) {
+            statusMessage = "ID already exists in DB";
+            statusType = "error";
         }
+        // B. Check File Duplicate
+        else if (seenInFile.has(idKey)) {
+            statusMessage = "Duplicate ID in this file";
+            statusType = "error";
+        }
+        else {
+            seenInFile.add(idKey);
 
-        const user = userMap.get(normalize(row["CUSTOMER NAME"]));
-        if (!user) {
-          return {
-            machineCode,
-            customerName: row["CUSTOMER NAME"],
-            customerId: null,
-            valid: false,
-            error: "Customer not found",
-          };
+            // C. Link Customer
+            if (legacyId) {
+                const user = userLookup.get(String(legacyId).trim());
+                if (user) {
+                    return {
+                        machineCode,
+                        legacyId,
+                        customerName: customerNameExcel,
+                        matchedCustomerName: user.name,
+                        customerId: user.id,
+                        valid: true,
+                        statusMessage: "Ready (Matched)",
+                        statusType: "success",
+                        machineNo, year, machineType
+                    } as UploadRow;
+                } else {
+                    statusMessage = `User ID '${legacyId}' not found`;
+                    statusType = "warning";
+                }
+            } else {
+                statusMessage = "No User ID provided (Unassigned)";
+                statusType = "warning";
+            }
         }
 
         return {
-          machineCode,
-          customerName: row["CUSTOMER NAME"],
-          customerId: user.id,
-          valid: true,
-        };
-      })
-    );
+            machineCode,
+            legacyId,
+            customerName: customerNameExcel,
+            matchedCustomerName: null,
+            customerId: null,
+            valid: statusType !== "error",
+            statusMessage,
+            statusType,
+            machineNo, year, machineType
+        } as UploadRow;
+
+    }).filter(Boolean) as UploadRow[];
+
+    setUploadRows(processed);
   };
 
   const handleConfirmUpload = async () => {
     setUploading(true);
-    setUploadedCount(0);
+    let count = 0;
 
-    const existing = await fetchExistingMachineCodes();
-    const skipped: UploadRow[] = [];
     const validRows = uploadRows.filter((r) => r.valid);
 
     for (const r of validRows) {
-      const key = extractSerial(r.machineCode);
-
-      if (existing.has(key)) {
-        skipped.push({ ...r, error: "Already exists" });
-        continue;
-      }
-
-      await addMachineToDB({
+      await addDoc(collection(db, "machines"), {
         machineCode: r.machineCode,
-        assignedTo: r.customerId,
+        assignedTo: r.customerId, 
         status: r.customerId ? "online" : "offline",
+        machineNo: r.machineNo,
+        year: r.year,
+        machineType: r.machineType,
+        legacyCustomerId: r.legacyId,
+        createdAt: serverTimestamp()
       });
-
-      existing.add(key);
-      setUploadedCount((c) => c + 1);
+      count++;
+      setUploadedCount(count);
     }
 
     setUploading(false);
     setIsUploadOpen(false);
     setUploadRows([]);
-    setSkippedRows(skipped);
-    await loadMachines();
-
-    if (skipped.length > 0) setShowSkippedDialog(true);
+    fetchFirstPage(); // Refresh list to show new uploads
 
     toast({
       title: "Bulk upload completed",
-      description: `${validRows.length - skipped.length} uploaded, ${skipped.length} skipped`,
+      description: `${count} machines uploaded successfully.`,
     });
   };
-
-  /* UI HELPERS */
-  const validCount = uploadRows.filter((r) => r.valid).length;
-  const pendingCount = validCount - uploadedCount;
 
   const filteredMachines = machines.filter(
     (m) =>
       typeof m.machineCode === "string" &&
-      m.machineCode.toLowerCase().includes(searchQuery.toLowerCase())
+      m.machineCode.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* HEADER */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Machine Inventory</h1>
           <p className="text-muted-foreground">
@@ -404,59 +540,78 @@ export default function Machines() {
               </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-4xl">
+            <DialogContent className="max-w-5xl">
               <DialogHeader>
                 <DialogTitle>Bulk Upload Machines</DialogTitle>
                 <DialogDescription>
-                  Preview Excel data before uploading
+                  Upload an Excel file with 'MACHINE NO', 'YEAR', 'MACHINE TYPE', and 'legacyCustomerId'.
                 </DialogDescription>
               </DialogHeader>
 
-              <div
-                className="border-2 border-dashed rounded-lg p-10 text-center cursor-pointer hover:bg-slate-50 transition"
-                onClick={() => document.getElementById("bulkFile")?.click()}
-              >
-                <FileSpreadsheet className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">Click to upload .xlsx file</p>
-                <input
-                  id="bulkFile"
-                  type="file"
-                  accept=".xlsx,.csv"
-                  hidden
-                  onChange={(e) =>
-                    e.target.files && handleFileUpload(e.target.files[0])
-                  }
-                />
-              </div>
-
-              {uploadRows.length > 0 && (
+              {!uploadRows.length ? (
+                  <div
+                    className="border-2 border-dashed rounded-lg p-10 text-center cursor-pointer hover:bg-slate-50 transition"
+                    onClick={() => document.getElementById("bulkFile")?.click()}
+                  >
+                    <FileSpreadsheet className="mx-auto h-10 w-10 text-muted-foreground" />
+                    <p className="mt-2 text-sm text-muted-foreground">Click to select .xlsx file</p>
+                    <input
+                      id="bulkFile"
+                      type="file"
+                      accept=".xlsx,.csv"
+                      hidden
+                      onChange={(e) =>
+                        e.target.files && handleFileUpload(e.target.files[0])
+                      }
+                    />
+                  </div>
+              ) : (
                 <>
-                  <div className="flex gap-3 mt-4 text-sm">
-                    <Badge>Will upload: {validCount}</Badge>
-                    <Badge variant="secondary">Uploaded: {uploadedCount}</Badge>
-                    <Badge variant="outline">Pending: {pendingCount}</Badge>
+                  <div className="flex gap-4 text-sm mb-2">
+                    <span className="text-green-600 font-medium">Valid: {uploadRows.filter(r => r.valid).length}</span>
+                    <span className="text-muted-foreground">Total: {uploadRows.length}</span>
                   </div>
 
-                  <div className="border rounded-md max-h-[300px] overflow-y-auto mt-2">
+                  <div className="border rounded-md max-h-[400px] overflow-y-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Machine Code</TableHead>
+                        <TableRow className="bg-muted/50 sticky top-0">
+                          <TableHead>Machine Code (Generated)</TableHead>
                           <TableHead>Customer</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {uploadRows.map((r, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-mono">{r.machineCode}</TableCell>
-                            <TableCell>{r.customerName}</TableCell>
+                          <TableRow key={i} className={r.valid ? "" : "bg-red-50"}>
+                            <TableCell className="font-mono text-xs font-medium">
+                                {r.machineCode}
+                            </TableCell>
                             <TableCell>
-                              {r.valid ? (
-                                <Badge className="bg-green-600">Valid</Badge>
-                              ) : (
-                                <Badge variant="destructive">{r.error}</Badge>
-                              )}
+                                {r.matchedCustomerName ? (
+                                    <div className="flex flex-col">
+                                        <span className="text-green-700 font-medium flex items-center gap-1 text-xs">
+                                            <CheckCircle2 className="h-3 w-3"/> {r.matchedCustomerName}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">Legacy ID: {r.legacyId}</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col">
+                                        <span className="text-muted-foreground text-xs italic">
+                                            {r.customerName || "Unknown"}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">Legacy ID: {r.legacyId || "N/A"}</span>
+                                    </div>
+                                )}
+                            </TableCell>
+                            <TableCell>
+                                <div className={`flex items-center gap-2 text-xs font-medium ${
+                                    r.statusType === 'success' ? 'text-green-600' :
+                                    r.statusType === 'warning' ? 'text-amber-600' : 'text-red-600'
+                                }`}>
+                                    {r.statusType === 'error' && <AlertCircle className="h-3 w-3"/>}
+                                    {r.statusMessage}
+                                </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -467,11 +622,16 @@ export default function Machines() {
               )}
 
               <DialogFooter>
+                <Button variant="ghost" onClick={() => setUploadRows([])}>Clear</Button>
                 <Button
                   onClick={handleConfirmUpload}
-                  disabled={uploading || validCount === 0}
+                  disabled={uploading || uploadRows.filter(r => r.valid).length === 0}
                 >
-                  {uploading ? "Uploading..." : "Confirm Upload"}
+                  {uploading ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...</>
+                  ) : (
+                      `Confirm Upload (${uploadRows.filter(r => r.valid).length})`
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -487,41 +647,75 @@ export default function Machines() {
 
       {/* MACHINE LIST CARD */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <div className="flex justify-between items-center">
             <CardTitle>Machine List</CardTitle>
-            <div className="relative w-72">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search code..."
-                className="pl-9"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex items-center gap-2">
+                {/* SORT MENU */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-2">
+                            <ArrowUpDown className="h-4 w-4" /> Sort
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleSort("machineCode")}>
+                            Code {sortField === 'machineCode' && (sortDir === 'asc' ? '↑' : '↓')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSort("status")}>
+                            Status {sortField === 'status' && (sortDir === 'asc' ? '↑' : '↓')}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                <div className="relative w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Search code..."
+                    className="pl-9"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+                </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50">
                 <TableHead>Machine Code</TableHead>
+                <TableHead>Assigned To</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[100px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMachines.length === 0 ? (
+              {isLoading ? (
+                  [...Array(5)].map((_, i) => (
+                      <TableRow key={i}>
+                          <TableCell><div className="h-4 w-32 bg-slate-100 rounded animate-pulse"/></TableCell>
+                          <TableCell><div className="h-4 w-24 bg-slate-100 rounded animate-pulse"/></TableCell>
+                          <TableCell><div className="h-4 w-12 bg-slate-100 rounded animate-pulse"/></TableCell>
+                          <TableCell/>
+                      </TableRow>
+                  ))
+              ) : filteredMachines.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
                     No machines found.
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredMachines.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-mono font-medium">
+                  <TableRow key={m.id} className="hover:bg-slate-50">
+                    <TableCell className="font-mono font-medium text-sm">
                       {m.machineCode}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                        {getCustomerName(m.assignedTo)}
                     </TableCell>
                     <TableCell>
                       <Badge className={statusBadgeClass(m.status)}>
@@ -554,6 +748,30 @@ export default function Machines() {
             </TableBody>
           </Table>
         </CardContent>
+        {/* PAGINATION FOOTER */}
+        <CardFooter className="flex items-center justify-between border-t py-4">
+            <div className="text-sm text-muted-foreground">
+                Page {page}
+            </div>
+            <div className="flex gap-2">
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={fetchPrevPage} 
+                    disabled={page === 1 || isLoading}
+                >
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={fetchNextPage} 
+                    disabled={!hasMore || isLoading}
+                >
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+            </div>
+        </CardFooter>
       </Card>
 
       {/* --- ADD MACHINE DIALOG --- */}
@@ -562,19 +780,18 @@ export default function Machines() {
           <DialogHeader>
             <DialogTitle>Add New Machine</DialogTitle>
             <DialogDescription>
-              Enter the serial number and machine model.
+              Enter details manually.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label>Serial Number</Label>
+              <Label>Machine Code (ID-Year)</Label>
               <div className="relative">
                 <Hash className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-9 font-mono"
                   placeholder="00-00-00"
-                  maxLength={8}
                   value={addForm.serial}
                   onChange={(e) =>
                     setAddForm({ ...addForm, serial: formatSerialInput(e.target.value) })
@@ -613,20 +830,14 @@ export default function Machines() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Machine</DialogTitle>
-            <DialogDescription>
-              Update the machine serial number or model name.
-            </DialogDescription>
           </DialogHeader>
-
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label>Serial Number</Label>
+              <Label>Machine Code (ID-Year)</Label>
               <div className="relative">
                 <Hash className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-9 font-mono"
-                  placeholder="00-00-00"
-                  maxLength={8}
                   value={editForm.serial}
                   onChange={(e) =>
                     setEditForm({ ...editForm, serial: formatSerialInput(e.target.value) })
@@ -634,14 +845,12 @@ export default function Machines() {
                 />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>Machine Name / Type</Label>
               <div className="relative">
                 <Tag className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-9"
-                  placeholder="e.g. Blaster X1"
                   value={editForm.name}
                   onChange={(e) =>
                     setEditForm({ ...editForm, name: e.target.value })
@@ -650,45 +859,11 @@ export default function Machines() {
               </div>
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleUpdateMachine}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* SKIPPED ITEMS DIALOG */}
-      <Dialog open={showSkippedDialog} onOpenChange={setShowSkippedDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Skipped Uploads</DialogTitle>
-            <DialogDescription>
-              The following machines were not uploaded because they already exist.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[300px] overflow-y-auto border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Machine Code</TableHead>
-                  <TableHead>Reason</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {skippedRows.map((r, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-mono">{r.machineCode}</TableCell>
-                    <TableCell className="text-destructive">{r.error}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowSkippedDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

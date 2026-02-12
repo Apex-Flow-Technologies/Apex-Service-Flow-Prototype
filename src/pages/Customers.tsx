@@ -12,12 +12,12 @@ import {
   Search, 
   Trash2, 
   Loader2,
-  FileSpreadsheet,
   ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
+  FileSpreadsheet,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 import {
@@ -101,7 +101,7 @@ export default function Customers() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Pagination & Sort State
+  // Pagination & Sort State (Added these)
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [pageHistory, setPageHistory] = useState<QueryDocumentSnapshot<DocumentData>[]>([]);
   const [page, setPage] = useState(1);
@@ -110,16 +110,28 @@ export default function Customers() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [jumpPage, setJumpPage] = useState("");
 
-  // Dialogs
+  // Add Dialog State
   const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    username: "",
+    password: "",
+  });
+
+  // Edit Dialog State
   const [editCustomer, setEditCustomer] = useState<any>(null);
-  const [bulkOpen, setBulkOpen] = useState(false);
-  
-  // Forms
-  const [form, setForm] = useState({ name: "", phone: "", address: "", username: "", password: "" });
-  const [editForm, setEditForm] = useState({ name: "", phone: "", address: "", username: "", password: "" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    username: "",
+    password: "",
+  });
 
   // Bulk Upload State
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkPreview, setBulkPreview] = useState<any[]>([]);
   const [bulkUploading, setBulkUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -199,19 +211,19 @@ export default function Customers() {
       
       if (newHistory.length === 0) {
          q = query(
-            collection(db, "user"),
-            where("role", "==", "user"),
-            orderBy(sortField, sortDir),
-            limit(PAGE_SIZE)
+           collection(db, "user"),
+           where("role", "==", "user"),
+           orderBy(sortField, sortDir),
+           limit(PAGE_SIZE)
          );
       } else {
          const startDoc = newHistory[newHistory.length - 1];
          q = query(
-            collection(db, "user"),
-            where("role", "==", "user"),
-            orderBy(sortField, sortDir),
-            startAfter(startDoc),
-            limit(PAGE_SIZE)
+           collection(db, "user"),
+           where("role", "==", "user"),
+           orderBy(sortField, sortDir),
+           startAfter(startDoc),
+           limit(PAGE_SIZE)
          );
       }
 
@@ -317,8 +329,6 @@ export default function Customers() {
       .filter((m) => !m.assignedTo)
       .sort((a, b) => (b.machineCode || "").localeCompare(a.machineCode || ""));
 
-  // ---------------- HANDLERS ----------------
-
   const handleSort = (field: string) => {
       if (sortField === field) {
           setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -328,20 +338,40 @@ export default function Customers() {
       }
   };
 
+  // ---------------- VALIDATION ----------------
+  const validateInputs = (data: any, isEditMode: boolean) => {
+    // Simple validation logic
+    if (!data.name || data.name.trim().length < 2) return false;
+    if (!data.username || data.username.trim().length < 3) return false;
+    if (!data.phone || data.phone.length !== 10) return false;
+    if (!isEditMode && (!data.password || data.password.length < 6)) return false;
+    return true;
+  };
+
+  // ---------------- HANDLERS ----------------
+
+  // 1. Handle Edit Click - ROBUST MAPPING
   const handleEditClick = (customer: any) => {
     setEditCustomer(customer);
-    // Explicitly map fields, default to empty string if undefined (PRESERVED)
+    // Explicitly map fields, default to empty string if undefined
     setEditForm({
       name: customer.name || "",
       phone: customer.phone || "",
       address: customer.address || "",
       username: customer.username || "",
-      password: "", // Reset password field on open
+      password: "", 
     });
   };
 
   const saveCustomerEdits = async () => {
     if (!editCustomer?.id) return;
+
+    // Validate
+    if (!validateInputs(editForm, true)) {
+      toast({ title: "Validation Error", description: "Please fix inputs.", variant: "destructive" });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const docRef = doc(db, "user", editCustomer.id);
@@ -351,11 +381,14 @@ export default function Customers() {
         address: editForm.address,
         username: editForm.username,
       };
+
+      // Only update password if the user typed something
       if (editForm.password.trim() !== "") {
         updateData.password = editForm.password;
       }
       await updateDoc(docRef, updateData);
-      
+
+      // Update Local State (Immediate UI change)
       setCustomers((prev) =>
         prev.map((c) => c.id === editCustomer.id ? { ...c, ...updateData } : c)
       );
@@ -369,18 +402,25 @@ export default function Customers() {
   };
 
   const createCustomer = async () => {
-    if (!form.name || !form.username || !form.password) {
-      toast({ title: "Missing fields", variant: "destructive" });
+    if (!validateInputs(form, false)) {
+      toast({ title: "Validation Error", description: "Check fields.", variant: "destructive" });
       return;
     }
+
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "user"), {
+      const newDoc = await addDoc(collection(db, "user"), {
         ...form,
         role: "user",
         createdAt: serverTimestamp(),
       });
-      fetchFirstPage(); 
+
+      // Add to local list immediately
+      setCustomers((prev) => [
+        { id: newDoc.id, ...form, role: "user" },
+        ...prev,
+      ]);
+
       toast({ title: "Customer created" });
       setForm({ name: "", phone: "", address: "", username: "", password: "" });
       setAddOpen(false);
@@ -405,9 +445,11 @@ export default function Customers() {
   const deleteCustomer = async (customer: any) => {
     if(!confirm("Are you sure?")) return;
     
-    // Optimistic update
-    setCustomers(prev => prev.filter(c => c.id !== customer.id));
+    // Unassign all machines locally first
     setMachines(prev => prev.map(m => m.assignedTo === customer.id ? { ...m, assignedTo: null } : m));
+    
+    // Remove customer locally
+    setCustomers(prev => prev.filter(c => c.id !== customer.id));
 
     try {
         const related = machines.filter((m) => m.assignedTo === customer.id);
@@ -415,7 +457,7 @@ export default function Customers() {
           await updateDoc(doc(db, "machines", m.id), { assignedTo: null });
         }
         await deleteDoc(doc(db, "user", customer.id));
-        fetchTotalCount(); // Refresh count
+        
         toast({ title: "Customer deleted" });
     } catch (error) {
         console.error("Delete failed", error);
@@ -430,7 +472,7 @@ export default function Customers() {
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // ---------------- BATCH UPLOAD FUNCTION (HIGH PERFORMANCE) ----------------
+  // ---------------- BATCH UPLOAD FUNCTION ----------------
   const uploadInBatches = async (rows: any[]) => {
     const CHUNK_SIZE = 500;
     const chunks = [];
@@ -602,14 +644,14 @@ export default function Customers() {
             </div>
 
             <div className="text-sm font-medium">
-                Page {page} of {totalPages}
+                Page {page} of {totalPages || 1}
             </div>
 
             <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={fetchPrevPage} disabled={page === 1 || isLoading}>
                     <ChevronLeft className="h-4 w-4 mr-1" /> Prev
                 </Button>
-                <Button variant="outline" size="sm" onClick={fetchNextPage} disabled={page >= totalPages || isLoading}>
+                <Button variant="outline" size="sm" onClick={fetchNextPage} disabled={!lastDoc || page >= totalPages || isLoading}>
                     Next <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
             </div>
@@ -623,12 +665,24 @@ export default function Customers() {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input placeholder="John Doe" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} />
+                <Label>Full Name <span className="text-red-500">*</span></Label>
+                <div className="relative">
+                    <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="John Doe" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input placeholder="9876543210" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} />
+                <Label>Phone (10 digits)</Label>
+                <div className="relative">
+                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        className="pl-9" 
+                        placeholder="9876543210" 
+                        value={form.phone} 
+                        maxLength={10}
+                        onChange={(e) => setForm({...form, phone: e.target.value.replace(/\D/g, '')})} 
+                    />
+                </div>
               </div>
             </div>
             <div className="space-y-2">
@@ -637,12 +691,18 @@ export default function Customers() {
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label>App Username</Label>
-                    <Input placeholder="user123" value={form.username} onChange={(e) => setForm({...form, username: e.target.value})} />
+                    <Label>App Username <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                        <AtSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input className="pl-9" placeholder="user123" value={form.username} onChange={(e) => setForm({...form, username: e.target.value})} />
+                    </div>
                 </div>
                 <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input type="password" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} />
+                    <Label>Password <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input className="pl-9" type="password" placeholder="••••••" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} />
+                    </div>
                 </div>
             </div>
           </div>
@@ -653,7 +713,7 @@ export default function Customers() {
         </DialogContent>
       </Dialog>
 
-      {/* ---------------- EDIT DIALOG (Fixed) ---------------- */}
+      {/* ---------------- EDIT DIALOG ---------------- */}
       <Dialog open={!!editCustomer} onOpenChange={() => setEditCustomer(null)}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
@@ -671,13 +731,14 @@ export default function Customers() {
                     </div>
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="edit-phone">Phone Number</Label>
+                    <Label htmlFor="edit-phone">Phone (10 digits)</Label>
                     <div className="relative">
                         <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input 
                             id="edit-phone" 
                             className="pl-9" 
                             value={editForm.phone} 
+                            maxLength={10}
                             onChange={(e) => setEditForm({...editForm, phone: e.target.value.replace(/\D/g, '')})} 
                         />
                     </div>
@@ -715,11 +776,11 @@ export default function Customers() {
                 </div>
             </div>
 
-            {/* MACHINE ASSIGNMENT SECTION (Preserved) */}
             {editCustomer?.id && (
                 <div className="border-t pt-4 space-y-3">
                     <div className="flex items-center justify-between">
                         <h4 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Assigned Machines</h4>
+                        
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button variant="outline" size="sm" className="h-8 border-dashed gap-2">
@@ -748,12 +809,16 @@ export default function Customers() {
 
                     <div className="space-y-2">
                         {assignedMachines(editCustomer.id).length === 0 ? (
-                            <div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded-md text-center">No machines currently assigned.</div>
+                            <div className="text-sm text-muted-foreground italic bg-muted/30 p-3 rounded-md text-center">
+                                No machines currently assigned.
+                            </div>
                         ) : (
                             assignedMachines(editCustomer.id).map((m) => (
                                 <div key={m.id} className="flex justify-between items-center bg-card border rounded-md p-2 pl-3 shadow-sm">
                                     <div className="flex items-center gap-2">
-                                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded"><Wrench className="h-3.5 w-3.5" /></div>
+                                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
+                                            <Wrench className="h-3.5 w-3.5" />
+                                        </div>
                                         <span className="text-sm font-medium">{getMachineLabel(m)}</span>
                                     </div>
                                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => unassignMachine(m.id)}>
@@ -790,7 +855,6 @@ export default function Customers() {
                   const ws = wb.Sheets[wb.SheetNames[0]];
                   const rawRows = XLSX.utils.sheet_to_json(ws) as any[];
                   
-                  // Fetch for dup check
                   const dbData = await fetchAllForBulkCheck();
                   const dbIds = new Set(dbData.map((c: any) => String(c.legacyCustomerId || "").trim()));
                   const seenIdsInFile = new Set<string>();
@@ -851,16 +915,10 @@ export default function Customers() {
               </div>
               <DialogFooter className="mt-4">
                 <Button variant="ghost" onClick={()=>setBulkPreview([])} disabled={bulkUploading}>Clear</Button>
-                {/* BATCH UPLOAD TRIGGER */}
                 <Button onClick={async ()=>{
                     setBulkUploading(true);
-                    
-                    // Filter valid rows
                     const validRows = bulkPreview.filter((r: any) => r._status === "Ready");
-                    
-                    // Call the batch upload function
                     await uploadInBatches(validRows);
-
                     setBulkUploading(false); setBulkPreview([]); setBulkOpen(false); fetchFirstPage();
                     toast({ title: "Bulk upload complete", description: `${validRows.length} customers uploaded.` });
                 }} disabled={bulkUploading || bulkPreview.filter((r:any)=>r._status==="Ready").length === 0}>

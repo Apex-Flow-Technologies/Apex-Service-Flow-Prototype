@@ -28,6 +28,7 @@ export interface User {
   username: string;
   role: "technician" | "manager";
   phone: string;
+  address?: string;
   status: "online" | "offline";
   activeJobs: number;
 }
@@ -56,6 +57,7 @@ export interface Ticket {
 
   createdAt: Date;
   updatedAt: Date;
+  assignedAt?: Date;
 
   machineCode?: string;
 
@@ -265,6 +267,7 @@ fetchTechnicians: async () => {
         email: data.email,
         role: data.role,
         phone: data.phone || "",
+        address: data.address || "",
         status: data.status || "offline",
         username: data.username || "",
         activeJobs,

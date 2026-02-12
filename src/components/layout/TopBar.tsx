@@ -31,36 +31,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Notifications */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <Badge 
-                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-              >
-                {recentNotifications.length}
-              </Badge>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Recent Activity</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {recentNotifications.map((notification) => (
-              <DropdownMenuItem key={notification.id} className="flex flex-col items-start py-3">
-                <span className="text-sm">{notification.action}</span>
-                <span className="text-xs text-muted-foreground mt-1">
-                  {formatTimeAgo(notification.timestamp)}
-                </span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-primary justify-center">
-              View all activity
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
+      
         {/* Profile Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

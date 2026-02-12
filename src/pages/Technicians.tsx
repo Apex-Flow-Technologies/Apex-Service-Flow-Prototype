@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, MoreHorizontal, Trash2, Edit, User as UserIcon, Lock } from 'lucide-react';
+import { Plus, Search, Phone, Mail, MoreHorizontal, Trash2, Edit, User as UserIcon, Lock, MapPin, AtSign, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,7 +41,6 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export default function Technicians() {
-  // Added updateTechnician to the destructuring
   const { technicians, addTechnician, updateTechnician, deleteTechnician, fetchTechnicians } = useStore();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,38 +49,94 @@ export default function Technicians() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  // Add User State (Includes new username/password fields)
+  // Add User State
   const [newUser, setNewUser] = useState({
     name: '',
     email: '',
     phone: '',
     role: 'technician' as 'technician' | 'manager',
     username: '',
-    password: ''
+    password: '',
+    address: ''
   });
 
   // Edit User State
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<(User & { password?: string }) | null>(null);
 
   useEffect(() => {
     fetchTechnicians();
   }, [fetchTechnicians]);
 
-const filteredTechnicians = technicians.filter(
-  (tech) =>
-    (tech.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (tech.email || "").toLowerCase().includes(searchQuery.toLowerCase())
-);
+  const filteredTechnicians = technicians.filter(
+    (tech) =>
+      (tech.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (tech.email || "").toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
+  // --- Validation Logic (Returns error message string or null) ---
+  const getValidationError = (data: any, isEditMode: boolean = false): string | null => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    // 1. Username
+    if (!data.username || data.username.trim().length < 3) {
+        return "Username must be at least 3 characters.";
+    }
+
+    // 2. Password
+    if (!isEditMode) {
+        if (!data.password || data.password.length < 6) {
+            return "Password must be at least 6 characters.";
+        }
+    } else {
+        // If editing and password field is used
+        if (data.password && data.password.length < 6) {
+            return "New password must be at least 6 characters.";
+        }
+    }
+
+    // 3. Name
+    if (!data.name || data.name.trim().length < 2) {
+        return "Full Name must be at least 2 characters.";
+    }
+
+    // 4. Email
+    if (!data.email) return "Email is required.";
+    if (!emailRegex.test(data.email)) return "Invalid email format.";
+    if (!data.email.toLowerCase().endsWith('@gmail.com')) {
+        return "Email must be a valid @gmail.com address.";
+    }
+
+    // 5. Phone
+    if (!data.phone) return "Phone number is required.";
+    if (data.phone.length !== 10) return "Phone number must be exactly 10 digits.";
+
+    return null; // No errors
+  };
 
   // --- Handlers ---
 
+  const handlePhoneChange = (val: string, setter: (v: string) => void) => {
+    // Only allow numbers, max 10 digits
+    const numericVal = val.replace(/\D/g, '').slice(0, 10);
+    setter(numericVal);
+  };
+
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
-    // Pass the full object including username/password to your store
+    
+    const errorMsg = getValidationError(newUser, false);
+    if (errorMsg) {
+        toast({
+            variant: "destructive",
+            title: "Input Error",
+            description: errorMsg,
+        });
+        return;
+    }
+
     addTechnician(newUser);
     setIsAddDialogOpen(false);
-    setNewUser({ name: '', email: '', phone: '', role: 'technician', username: '', password: '' });
+    setNewUser({ name: '', email: '', phone: '', role: 'technician', username: '', password: '', address: '' });
     toast({
       title: 'User added',
       description: `${newUser.name} has been added to the team.`,
@@ -89,24 +144,33 @@ const filteredTechnicians = technicians.filter(
   };
 
   const openEditDialog = (tech: User) => {
-    setEditingUser(tech);
+    setEditingUser({ ...tech, password: '' });
     setIsEditDialogOpen(true);
   };
 
   const handleUpdateUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingUser && updateTechnician) {
-      updateTechnician(editingUser.id, editingUser); // Assuming updateTechnician takes (id, data)
-      setIsEditDialogOpen(false);
-      setEditingUser(null);
-      toast({
-        title: 'Staff updated',
-        description: `${editingUser.name}'s details have been updated.`,
-      });
-    } else {
-        // Fallback if updateTechnician is not implemented in store yet
-        console.warn("updateTechnician function missing from store");
-        setIsEditDialogOpen(false);
+    
+    if (editingUser) {
+        const errorMsg = getValidationError(editingUser, true);
+        if (errorMsg) {
+            toast({
+                variant: "destructive",
+                title: "Input Error",
+                description: errorMsg,
+            });
+            return;
+        }
+
+        if (updateTechnician) {
+            updateTechnician(editingUser.id, editingUser);
+            setIsEditDialogOpen(false);
+            setEditingUser(null);
+            toast({
+                title: 'Staff updated',
+                description: `${editingUser.name}'s details have been updated.`,
+            });
+        }
     }
   };
 
@@ -134,15 +198,17 @@ const filteredTechnicians = technicians.filter(
               Add Staff
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          {/* Increased width to max-w-lg for better spacing */}
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Add New Team Member</DialogTitle>
               <DialogDescription>
-                Add a new technician or manager to your team.
+                Create a new account. All fields are validated on submit.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddUser}>
-              <div className="space-y-4 py-4">
+              <div className="grid gap-4 py-4">
+                {/* Row 1: Username & Password */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label htmlFor="username">Username</Label>
@@ -154,7 +220,6 @@ const filteredTechnicians = technicians.filter(
                                 value={newUser.username}
                                 onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
                                 className="pl-8"
-                                required
                             />
                         </div>
                     </div>
@@ -169,58 +234,82 @@ const filteredTechnicians = technicians.filter(
                                 value={newUser.password}
                                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                                 className="pl-8"
-                                required
                             />
                         </div>
                     </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="John Doe"
-                    value={newUser.name}
-                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                    required
-                  />
+
+                {/* Row 2: Name & Role */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="name">Full Name</Label>
+                        <Input
+                            id="name"
+                            placeholder="John Doe"
+                            value={newUser.name}
+                            onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="role">Role</Label>
+                        <Select
+                            value={newUser.role}
+                            onValueChange={(value: 'technician' | 'manager') =>
+                            setNewUser({ ...newUser, role: value })
+                            }
+                        >
+                            <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                            <SelectItem value="technician">Technician</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@apex.com"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                    required
-                  />
+
+                {/* Row 3: Email & Phone */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="email">Email Address</Label>
+                        <Input
+                            id="email"
+                            type="email"
+                            placeholder="john@apex.com"
+                            value={newUser.email}
+                            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="phone">Phone Number</Label>
+                        <div className="relative">
+                            <Phone className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                id="phone"
+                                placeholder="10 digits"
+                                value={newUser.phone}
+                                maxLength={10}
+                                onChange={(e) => handlePhoneChange(e.target.value, (val) => setNewUser({...newUser, phone: val}))}
+                                className="pl-8"
+                            />
+                        </div>
+                    </div>
                 </div>
+
+                {/* Row 4: Address (Full Width) */}
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    placeholder="+1 (555) 123-4567"
-                    value={newUser.phone}
-                    onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={newUser.role}
-                    onValueChange={(value: 'technician' | 'manager') =>
-                      setNewUser({ ...newUser, role: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="technician">Technician</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <Label htmlFor="address">Address</Label>
+                    <div className="relative">
+                        <MapPin className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            id="address"
+                            className="pl-8"
+                            placeholder="City, State" 
+                            value={newUser.address || ''} 
+                            onChange={(e) => setNewUser({...newUser, address: e.target.value})} 
+                        />
+                    </div>
                 </div>
               </div>
               <DialogFooter>
@@ -260,7 +349,6 @@ const filteredTechnicians = technicians.filter(
                   <TableHead className="w-[280px]">Name</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Contact</TableHead>
-                  {/* Status Column Removed as requested */}
                   <TableHead className="text-center">Active Jobs</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
@@ -272,11 +360,7 @@ const filteredTechnicians = technicians.filter(
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
                           <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                            {(tech.name || "U")
-  .split(" ")
-  .map((n) => n[0])
-  .join("")}
-
+                            {(tech.name || "U").split(' ').map(n => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -299,7 +383,6 @@ const filteredTechnicians = technicians.filter(
                         {tech.phone}
                       </div>
                     </TableCell>
-                    {/* Status Cell Removed */}
                     <TableCell className="text-center">
                       <Badge variant="outline" className="font-medium">
                         {tech.activeJobs}
@@ -336,59 +419,112 @@ const filteredTechnicians = technicians.filter(
       </Card>
 
       {/* --- EDIT USER DIALOG --- */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => { if(!open) setEditingUser(null); setIsEditDialogOpen(open); }}>
+        <DialogContent className="sm:max-w-lg">
             <DialogHeader>
                 <DialogTitle>Edit Team Member</DialogTitle>
                 <DialogDescription>Update details for {editingUser?.name}</DialogDescription>
             </DialogHeader>
             {editingUser && (
                 <form onSubmit={handleUpdateUser}>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-name">Full Name</Label>
-                            <Input
-                                id="edit-name"
-                                value={editingUser.name}
-                                onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                                required
-                            />
+                    <div className="grid gap-4 py-4">
+                        {/* Row 1: Username & Password */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-username">Username</Label>
+                                <div className="relative">
+                                    <UserIcon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        id="edit-username"
+                                        value={editingUser.username || ''}
+                                        onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+                                        className="pl-8"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-password">New Password</Label>
+                                <div className="relative">
+                                    <Lock className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        id="edit-password"
+                                        type="password"
+                                        placeholder="Blank to keep"
+                                        value={editingUser.password}
+                                        onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                                        className="pl-8"
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-email">Email Address</Label>
-                            <Input
-                                id="edit-email"
-                                type="email"
-                                value={editingUser.email}
-                                onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                                required
-                            />
+
+                        {/* Row 2: Name & Role */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-name">Full Name</Label>
+                                <Input
+                                    id="edit-name"
+                                    value={editingUser.name}
+                                    onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-role">Role</Label>
+                                <Select
+                                    value={editingUser.role}
+                                    onValueChange={(value: 'technician' | 'manager') =>
+                                        setEditingUser({ ...editingUser, role: value })
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a role" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="technician">Technician</SelectItem>
+                                        <SelectItem value="manager">Manager</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-phone">Phone Number</Label>
-                            <Input
-                                id="edit-phone"
-                                value={editingUser.phone}
-                                onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
-                                required
-                            />
+                        
+                        {/* Row 3: Email & Phone */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-email">Email Address</Label>
+                                <Input
+                                    id="edit-email"
+                                    type="email"
+                                    value={editingUser.email}
+                                    onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-phone">Phone Number</Label>
+                                <div className="relative">
+                                    <Phone className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        id="edit-phone"
+                                        value={editingUser.phone}
+                                        maxLength={10}
+                                        onChange={(e) => handlePhoneChange(e.target.value, (val) => setEditingUser({...editingUser, phone: val}))}
+                                        className="pl-8"
+                                    />
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Row 4: Address */}
                         <div className="space-y-2">
-                            <Label htmlFor="edit-role">Role</Label>
-                            <Select
-                                value={editingUser.role}
-                                onValueChange={(value: 'technician' | 'manager') =>
-                                    setEditingUser({ ...editingUser, role: value })
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a role" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="technician">Technician</SelectItem>
-                                    <SelectItem value="manager">Manager</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Label htmlFor="edit-address">Address</Label>
+                            <div className="relative">
+                                <MapPin className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input 
+                                    id="edit-address"
+                                    className="pl-8"
+                                    value={editingUser.address || ''}
+                                    onChange={(e) => setEditingUser({...editingUser, address: e.target.value})} 
+                                />
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>

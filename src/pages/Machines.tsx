@@ -11,8 +11,7 @@ import {
   startAfter,
   serverTimestamp,
   QueryDocumentSnapshot,
-  DocumentData,
-  where
+  DocumentData
 } from "firebase/firestore";
 import { db } from "@/firebase";
 
@@ -111,11 +110,10 @@ type UploadRow = {
 /* HELPERS */
 /* -------------------------------------------------------------------------- */
 
-const extractSerial = (machineCode: string) => {
-  if (!machineCode) return "";
-  const parts = machineCode.split("|");
-  return parts[0].trim().toLowerCase();
-};
+const normalize = (v: string) => v?.trim().toLowerCase();
+
+const extractSerial = (machineCode: string) =>
+  machineCode.split("|")[0].trim(); 
 
 const normalizeStatus = (status: any): "Online" | "Offline" =>
   typeof status === "string" && status.toLowerCase() === "online"
@@ -127,13 +125,9 @@ const statusBadgeClass = (status: "Online" | "Offline") =>
     ? "bg-green-600 text-white hover:bg-green-700"
     : "bg-slate-400 text-white hover:bg-slate-500";
 
-const formatSerialInput = (val: string) => {
-  return val; 
-};
-
-const isValidMachineCode = (code: string) => {
-    return code.includes("|"); 
-}
+// Regex: Any content followed by " | " followed by any content
+const isValidMachineStructure = (code: string) =>
+  /^.+ \| .+$/.test(code);
 
 /* -------------------------------------------------------------------------- */
 /* COMPONENT */
@@ -238,17 +232,17 @@ export default function Machines() {
       let q;
       if (newHistory.length === 0) {
          q = query(
-            collection(db, "machines"),
-            orderBy(sortField, sortDir),
-            limit(PAGE_SIZE)
+           collection(db, "machines"),
+           orderBy(sortField, sortDir),
+           limit(PAGE_SIZE)
          );
       } else {
          const startDoc = newHistory[newHistory.length - 1];
          q = query(
-            collection(db, "machines"),
-            orderBy(sortField, sortDir),
-            startAfter(startDoc),
-            limit(PAGE_SIZE)
+           collection(db, "machines"),
+           orderBy(sortField, sortDir),
+           startAfter(startDoc),
+           limit(PAGE_SIZE)
          );
       }
 
@@ -275,8 +269,18 @@ export default function Machines() {
       return snap.docs.map(d => ({id: d.id, ...d.data()}));
   }
 
-  // Load ALL users to match machine assignment (Users collection is generally smaller than machines, but eventually should be optimized)
-  // For now, loading all users to match names is acceptable if < 2000 users. 
+  // Helper to fetch existing codes for manual add
+  const fetchExistingMachineCodes = async (): Promise<Set<string>> => {
+    const snap = await getDocs(collection(db, "machines"));
+    return new Set(
+      snap.docs
+        .map((d: any) => d.data().machineCode)
+        .filter(Boolean)
+        .map((c: string) => extractSerial(c).toLowerCase())
+    );
+  };
+
+  // Load ALL users to match machine assignment
   const loadUsers = async () => {
     try {
       const snap = await getDocs(collection(db, "user"));
@@ -308,24 +312,47 @@ export default function Machines() {
 
   /* ADD MACHINE (Manual) */
   const handleAddMachine = async () => {
-    const fullCode = `${addForm.serial} | ${addForm.name}`;
-
-    if (!isValidMachineCode(fullCode)) {
+    // 1. Check for hyphen in serial
+    if (!addForm.serial.includes("-")) {
       toast({
-        title: "Invalid format",
-        description: "Must contain a '|' separator (e.g., 88-88-88 | Machine A)",
+        title: "Invalid Serial Format",
+        description: "Serial number must contain a hyphen (e.g. 223-33-22 or 00-00-00).",
         variant: "destructive",
       });
       return;
     }
 
-    // Quick duplicate check on current page (for better check, we rely on backend rules or bulk check)
-    // For manual add, checking strictly against loaded data is a simple first step.
-    const newSerial = extractSerial(fullCode);
-    const isDup = machines.some(m => extractSerial(m.machineCode) === newSerial);
-    
-    if (isDup) {
-      toast({ title: "Duplicate Serial", variant: "destructive" });
+    // 2. Check if name is present
+    if (!addForm.name.trim()) {
+      toast({
+        title: "Missing Name",
+        description: "Please enter a machine name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fullCode = `${addForm.serial.trim()} | ${addForm.name.trim()}`;
+
+    // 3. Check overall structure
+    if (!isValidMachineStructure(fullCode)) {
+      toast({
+        title: "System Error",
+        description: "Could not format machine code correctly.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const existing = await fetchExistingMachineCodes();
+    const key = extractSerial(fullCode).toLowerCase();
+
+    if (existing.has(key)) {
+      toast({
+        title: "Duplicate serial",
+        description: "This machine serial already exists",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -355,7 +382,27 @@ export default function Machines() {
 
   const handleUpdateMachine = async () => {
     if (!editMachineId) return;
-    const fullCode = `${editForm.serial} | ${editForm.name}`;
+
+    // 1. Check for hyphen
+    if (!editForm.serial.includes("-")) {
+      toast({
+        title: "Invalid Serial Format",
+        description: "Serial number must contain a hyphen (e.g. 223-33-22).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!editForm.name.trim()) {
+      toast({
+        title: "Missing Name",
+        description: "Machine name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fullCode = `${editForm.serial.trim()} | ${editForm.name.trim()}`;
 
     try {
       const machineRef = doc(db, "machines", editMachineId);
@@ -791,10 +838,11 @@ export default function Machines() {
                 <Hash className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-9 font-mono"
-                  placeholder="00-00-00"
+                  placeholder="e.g. 223-33-22"
                   value={addForm.serial}
+                  // RESTRICT INPUT TO NUMBERS AND HYPHEN ONLY
                   onChange={(e) =>
-                    setAddForm({ ...addForm, serial: formatSerialInput(e.target.value) })
+                    setAddForm({ ...addForm, serial: e.target.value.replace(/[^0-9-]/g, "") })
                   }
                 />
               </div>
@@ -838,9 +886,11 @@ export default function Machines() {
                 <Hash className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-9 font-mono"
+                  placeholder="e.g. 223-33-22"
                   value={editForm.serial}
+                  // RESTRICT INPUT TO NUMBERS AND HYPHEN ONLY
                   onChange={(e) =>
-                    setEditForm({ ...editForm, serial: formatSerialInput(e.target.value) })
+                    setEditForm({ ...editForm, serial: e.target.value.replace(/[^0-9-]/g, "") })
                   }
                 />
               </div>

@@ -23,6 +23,9 @@ import { useAudioPlayer } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 
+import { addDoc, collection, serverTimestamp } from "firebase/firestore"; //firestore imports for activity
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 /* ---------------- TYPES ---------------- */
 const statusLabel: Record<string, string> = {
   open: 'Open',
@@ -55,6 +58,7 @@ interface Ticket {
   description: string;
   attachments: Attachment[];
   status: 'assigned' | 'open' | 'in progress' | 'closed' | 'waiting_for_confirmation' | 'declined';
+  assignedToName?: string;
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -69,49 +73,77 @@ export default function TicketDetailScreen() {
   const [viewerMedia, setViewerMedia] = useState<{ type: 'image' | 'video'; uri: string } | null>(null);
   const [technicianAttachments, setTechnicianAttachments] = useState<Attachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  
+  const formatTicketId = (id?: number | string) =>
+  String(id ?? 0).padStart(4, '0');
+
 
   // Actions for assigned tickets
-  const handleAccept = async () => {
-    if (!ticket) return;
-    try {
-      await updateDoc(doc(db, 'tickets', ticket.id), {
-        status: 'in progress',
-        startedAt: new Date(),
-      });
-      setTicket({ ...ticket, status: 'in progress' });
-    } catch (e) {
-      console.error('Failed to accept ticket', e);
-    }
-  };
+const handleAccept = async () => {
+  if (!ticket) return;
+
+  try {
+    await updateDoc(doc(db, 'tickets', ticket.id), {
+      status: 'in progress',
+      startedAt: new Date(),
+    });
+//added activity log
+
+    await addDoc(collection(db, "activities"), {
+      type: "status",
+      action: `TICKET #${formatTicketId(ticket.ticketId)} accepted by '${ticket.assignedToName}'`,
+      timestamp: serverTimestamp(),
+      status: "active",
+    });
+
+    setTicket({ ...ticket, status: 'in progress' });
+
+  } catch (e) {
+    console.error('Failed to accept ticket', e);
+  }
+};
+
 
   const handleDecline = async () => {
-    if (!ticket) return;
-    Alert.alert(
-      'Decline Job',
-      'Are you sure you want to decline this ticket?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Decline',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await updateDoc(doc(db, 'tickets', ticket.id), {
-                status: 'declined',
-                declinedAt: new Date(),
-              });
-              setTicket({ ...ticket, status: 'declined' });
-              // Navigate back after declining
-              router.back();
-            } catch (e) {
-              console.error('Failed to decline ticket', e);
-              Alert.alert('Error', 'Failed to decline the ticket');
-            }
-          },
+  if (!ticket) return;
+
+  Alert.alert(
+    'Decline Job',
+    'Are you sure you want to decline this ticket?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Decline',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await updateDoc(doc(db, 'tickets', ticket.id), {
+              status: 'declined',
+              declinedAt: new Date(),
+            });
+
+            // ADDED ACTIVITY LOG
+            await addDoc(collection(db, "activities"), {
+              type: "status",
+              action: `TICKET #${formatTicketId(ticket.ticketId)} declined by '${ticket.assignedToName}'`,
+              timestamp: serverTimestamp(),
+              status: "active",
+            });
+
+            setTicket({ ...ticket, status: 'declined' });
+
+            router.back();
+
+          } catch (e) {
+            console.error('Failed to decline ticket', e);
+            Alert.alert('Error', 'Failed to decline the ticket');
+          }
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
+
 
   // Photo upload for technician
   const ensureMediaPermissions = async () => {
@@ -191,6 +223,14 @@ export default function TicketDetailScreen() {
                 completedAt: new Date(),
                 technicianAttachments: technicianAttachments,
               });
+
+              await addDoc(collection(db, "activities"), {
+                type: "status",
+                action: `TICKET #${formatTicketId(ticket.ticketId)} completed by ${ticket.assignedToName} — pending approval`,
+                timestamp: serverTimestamp(),
+                status: "active",
+              });
+
               Alert.alert('Success', 'Job submitted for manager approval!', [
                 {
                   text: 'OK',
@@ -246,6 +286,7 @@ export default function TicketDetailScreen() {
           description: data.description || 'No description provided',
           attachments: data.attachments || [],
           status: data.status || 'open',
+          assignedToName: data.assignedToName,
         });
 
         // Load existing technician attachments if any

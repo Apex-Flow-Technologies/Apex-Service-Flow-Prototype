@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { Ticket, subscribeToTickets } from '@/data/tickets';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { addDoc, collection, serverTimestamp, getDoc} from 'firebase/firestore'; //for activity log
+
 
 /* ---------------- CONTEXT TYPE ---------------- */
 
@@ -34,23 +36,68 @@ export const TicketsProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => unsub();
   }, []);
 
-  /* ✅ FIXED: ASSIGN DOES NOT START WORK */
+  
   const assignTicket = async (
-    id: string,
-    technician: AssignedTechnician
-  ) => {
-    await updateDoc(doc(db, 'tickets', id), {
-      status: 'assigned',                 // ✅ FIX HERE
-      assignedToId: technician.username,  // technician identity
-      assignedToName: technician.name,    // UI display
-    });
-  };
+  id: string,
+  technician: AssignedTechnician
+) => {
+  const ticketRef = doc(db, 'tickets', id);
 
-  const confirmClosure = async (id: string) => {
-    await updateDoc(doc(db, 'tickets', id), {
-      status: 'closed',
-    });
-  };
+  // GET ticket data first
+const snap = await getDoc(ticketRef);
+
+let ticketNumber = id; // fallback
+
+if (snap.exists()) {
+  const data = snap.data();
+  if (data?.ticketId) {
+    ticketNumber = String(data.ticketId).padStart(4, '0');
+  }
+}
+
+
+  await updateDoc(ticketRef, {
+    status: 'assigned',
+    assignedToId: technician.username,
+    assignedToName: technician.name,
+  });
+
+  //ACTIVITY LOG
+  await addDoc(collection(db, "activities"), {
+    type: "assignment",
+    action: `TICKET #${ticketNumber} assigned to ${technician.name}`,
+    timestamp: serverTimestamp(),
+    status: "active",
+  });
+};
+
+const confirmClosure = async (id: string) => {
+  const ticketRef = doc(db, 'tickets', id);
+
+const snap = await getDoc(ticketRef);
+
+let ticketNumber = id; // fallback
+
+if (snap.exists()) {
+  const data = snap.data();
+  if (data?.ticketId) {
+    ticketNumber = String(data.ticketId).padStart(4, '0');
+  }
+}
+
+  await updateDoc(ticketRef, {
+    status: 'closed',
+  });
+
+  // ACTIVITY LOG
+  await addDoc(collection(db, "activities"), {
+    type: "completion",
+    action: `TICKET #${ticketNumber} approved and closed by manager`,
+    timestamp: serverTimestamp(),
+    status: "active",
+  });
+};
+
 
   const value = useMemo(
     () => ({

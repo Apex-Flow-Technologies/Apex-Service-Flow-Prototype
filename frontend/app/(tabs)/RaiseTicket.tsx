@@ -282,6 +282,12 @@ export default function RaiseTicket() {
 
       // Save to Firestore
       await addDoc(collection(db, "tickets"), newTicket)
+      await addDoc(collection(db, "activities"), {
+        type: "creation",
+        action: `TICKET #${String(nextNumber).padStart(4, '0')} raised by ${user.name}`,
+        timestamp: serverTimestamp(),
+        status: "active",
+      })
 
       showSuccessToast()
       // Reset fields

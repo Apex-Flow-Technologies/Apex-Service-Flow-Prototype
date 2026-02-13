@@ -191,6 +191,8 @@ interface AppState {
 
   // Activities
   activities: Activity[];
+  fetchActivities: () => Promise<void>;
+
 
   listenToActivities: () => () => void;
 }
@@ -198,6 +200,19 @@ interface AppState {
 /* ===============================
    Store
 ================================ */
+
+async function logActivity(
+  type: "assignment" | "status" | "creation" | "completion",
+  action: string
+) {
+  await addDoc(collection(db, "activities"), {
+    type,
+    action,
+    timestamp: serverTimestamp(),
+    status: "active",
+  });
+}
+
 
 export const useStore = create<AppState>((set, get) => ({
   /* ===============================
@@ -255,7 +270,7 @@ fetchTechnicians: async () => {
 
       const activeJobs = tickets.filter((t) => {
         return (
-          t.assignedToId === data.username &&
+          t.assignedToId === userId &&
           t.status !== "completed" &&
           t.status !== "declined"
         );
@@ -283,39 +298,61 @@ fetchTechnicians: async () => {
 
 
   addTechnician: async (tech) => {
-    try {
-      const ref = await addDoc(collection(db, "user"), {
-        ...tech,
-        status: "offline",
-        activeJobs: 0,
-      });
+  try {
+    const ref = await addDoc(collection(db, "user"), {
+      ...tech,
+      status: "offline",
+      activeJobs: 0,
+    });
 
-      const newTech: User = {
-        ...tech,
-        id: ref.id,
-        status: "offline",
-        activeJobs: 0,
-      };
+    const roleLabel =
+      tech.role.charAt(0).toUpperCase() + tech.role.slice(1);
 
-      set((state) => ({
-        technicians: [...state.technicians, newTech],
-      }));
-    } catch (err) {
-      console.error("Add technician error:", err);
-    }
-  },
+    await logActivity(
+      "creation",
+      `${roleLabel} ${tech.name} was added`
+    );
+
+    const newTech: User = {
+      ...tech,
+      id: ref.id,
+      status: "offline",
+      activeJobs: 0,
+    };
+
+    set((state) => ({
+      technicians: [...state.technicians, newTech],
+    }));
+  } catch (err) {
+    console.error("Add technician error:", err);
+  }
+},
+
 
   deleteTechnician: async (id) => {
-    try {
-      await deleteDoc(doc(db, "user", id));
+  try {
+    const tech = get().technicians.find((t) => t.id === id);
 
-      set((state) => ({
-        technicians: state.technicians.filter((t) => t.id !== id),
-      }));
-    } catch (err) {
-      console.error("Delete technician error:", err);
+    await deleteDoc(doc(db, "user", id));
+
+    if (tech) {
+      const roleLabel =
+        tech.role.charAt(0).toUpperCase() + tech.role.slice(1);
+
+      await logActivity(
+        "status",
+        `${roleLabel} ${tech.name} was removed`
+      );
     }
-  },
+
+    set((state) => ({
+      technicians: state.technicians.filter((t) => t.id !== id),
+    }));
+  } catch (err) {
+    console.error("Delete technician error:", err);
+  }
+},
+
 
   updateTechnician: async (id, updates) => {
     try {
@@ -349,86 +386,95 @@ fetchTechnicians: async () => {
     }
   },
 
-  updateTicket: async (id, updates) => {
-    try {
-      await updateDoc(doc(db, "tickets", id), {
-        ...updates,
-        updatedAt: new Date(),
-      });
+updateTicket: async (id, updates) => {
+  try {
+    await updateDoc(doc(db, "tickets", id), {
+      ...updates,
+      updatedAt: new Date(),
+    });
 
-      if (updates.status) {
-        await addDoc(collection(db, "activities"), {
-          type: updates.status === "completed" ? "completion" : "status",
-          action: `Ticket ${id} marked as ${updates.status}`,
-          timestamp: serverTimestamp(),
-          status: "active",
-        });
+    // ✅ If status changed, log activity
+    if (updates.status) {
+      let activityType: "assignment" | "status" | "creation" | "completion" = "status";
+      let actionText = `Ticket ${id} marked as ${updates.status}`;
+
+      if (updates.status === "completed") {
+        activityType = "completion";
+      } else if (updates.status === "declined") {
+        activityType = "status";
+        actionText = `Ticket ${id} was declined`;
+      } else if (updates.status === "in-progress") {
+        activityType = "status";
+        actionText = `Ticket ${id} is now in progress`;
       }
 
-      set((state) => ({
-        tickets: state.tickets.map((t) =>
-          t.id === id ? { ...t, ...updates } : t
-        ),
-      }));
-    } catch (err) {
-      console.error("Update ticket error:", err);
+      await logActivity(activityType, actionText);
     }
-  },
 
-  assignTicket: async (ticketId, technicianId) => {
-    try {
-      const tech = get().technicians.find(
-        (t) => t.id === technicianId
-      );
+    set((state) => ({
+      tickets: state.tickets.map((t) =>
+        t.id === id ? { ...t, ...updates } : t
+      ),
+    }));
+  } catch (err) {
+    console.error("Update ticket error:", err);
+  }
+},
 
-      if (!tech) return;
+  assignTicket: async (ticketId, technicianUsername) => {
+  try {
+    const tech = get().technicians.find(
+      (t) => t.username === technicianUsername
+    );
 
-      const ticket = get().tickets.find(
-        (t) => t.id === ticketId
-      );
+    if (!tech) return;
 
-      const ticketNo = ticket?.displayId || ticketId;
+    const ticket = get().tickets.find(
+      (t) => t.id === ticketId
+    );
 
-      await updateDoc(doc(db, "tickets", ticketId), {
-        status: "assigned",
-        assignedToId: technicianId,
-        assignedToName: tech.name,
-        updatedAt: new Date(),
-      });
+    const ticketNo = ticket?.displayId || ticketId;
 
-      await addDoc(collection(db, "activities"), {
-        type: "assignment",
-        action: `${tech.name} assigned ${ticketNo}`,
-        timestamp: serverTimestamp(),
-        status: "active",
-      });
+    await updateDoc(doc(db, "tickets", ticketId), {
+      status: "assigned",
+      assignedToId: tech.id,          // always store doc id
+      assignedToName: tech.name,
+      updatedAt: new Date(),
+    });
 
-      set((state) => ({
-        tickets: state.tickets.map((t) =>
-          t.id === ticketId
-            ? {
-                ...t,
-                status: "assigned",
-                assignedToId: technicianId,
-                assignedToName: tech.name,
-              }
-            : t
-        ),
+    await logActivity(
+      "assignment",
+      `${tech.name} assigned ${ticketNo}`
+    );
 
-        technicians: state.technicians.map((t) =>
-          t.id === technicianId
-            ? { ...t, activeJobs: t.activeJobs + 1 }
-            : t
-        ),
-      }));
-    } catch (err) {
-      console.error("Assign ticket error:", err);
-    }
-  },
+    set((state) => ({
+      tickets: state.tickets.map((t) =>
+        t.id === ticketId
+          ? {
+              ...t,
+              status: "assigned",
+              assignedToId: tech.id,
+              assignedToName: tech.name,
+            }
+          : t
+      ),
+
+      technicians: state.technicians.map((t) =>
+        t.id === tech.id
+          ? { ...t, activeJobs: t.activeJobs + 1 }
+          : t
+      ),
+    }));
+  } catch (err) {
+    console.error("Assign ticket error:", err);
+  }
+},
+
 
   /* ===============================
      Activities (Realtime)
   ================================ */
+  
 
   activities: [],
 
@@ -456,4 +502,32 @@ fetchTechnicians: async () => {
 
     return unsubscribe;
   },
+  fetchActivities: async () => {
+  try {
+    const q = query(
+      collection(db, "activities"),
+      orderBy("timestamp", "desc"),
+      limit(20)
+    );
+
+    const snap = await getDocs(q);
+
+    const activities: Activity[] = snap.docs.map((d) => {
+      const data = d.data() as any;
+
+      return {
+        id: d.id,
+        action: data.action,
+        type: data.type,
+        timestamp: data.timestamp?.toDate() || new Date(),
+      };
+    });
+
+    set({ activities });
+
+  } catch (err) {
+    console.error("Fetch activities error:", err);
+  }
+},
+
 }));

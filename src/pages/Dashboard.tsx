@@ -21,10 +21,8 @@ import { db } from "@/firebase";
 export default function Dashboard() {
   const [tickets, setTickets] = useState<any[]>([]);
   const [technicians, setTechnicians] = useState<any[]>([]);
-  const { activities, listenToActivities } = useStore();
-
-
-
+  const { activities, listenToActivities, fetchActivities } = useStore();
+  
   const stats = [
     {
       title: 'Total Tickets',
@@ -89,6 +87,7 @@ export default function Dashboard() {
     }));
 
     setTechnicians(techData);
+    await fetchActivities();
 
   };
 
@@ -230,11 +229,14 @@ function StatusBar({ label, count, total, color }: { label: string; count: numbe
   );
 }
 
-function formatTimeAgo(date: Date): string {
+function formatTimeAgo(date?: Date): string {
+  if (!date) return "Unknown time";
+
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-  
-  if (seconds < 60) return 'Just now';
+
+  if (seconds < 60) return "Just now";
   if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
   return `${Math.floor(seconds / 86400)} days ago`;
 }
+

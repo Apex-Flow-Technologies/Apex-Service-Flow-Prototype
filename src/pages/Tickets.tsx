@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Search, User, Clock, CheckCircle2, XCircle, ArrowRight, 
   Calendar, UploadCloud, Monitor, UserCheck, LayoutGrid, List, 
-  Download, ChevronLeft, ChevronRight, FileSpreadsheet
+  Download, ChevronLeft, ChevronRight, FileSpreadsheet, Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 type TicketStatus = 'new' | 'assigned' | 'in-progress' | 'completed' | 'declined';
 
 const ITEMS_PER_PAGE = 30;
+const REFRESH_INTERVAL = 5000; // 5 Seconds
 
 const statusConfig: Record<TicketStatus, { label: string; color: string; bgColor: string; borderColor: string; icon: React.ComponentType<{ className?: string }> }> = {
   new: { label: 'Unassigned', color: 'text-slate-600', bgColor: 'bg-slate-100', borderColor: 'border-slate-200', icon: Clock },
@@ -46,9 +47,13 @@ const statusConfig: Record<TicketStatus, { label: string; color: string; bgColor
 
 // --- Helper Functions ---
 
+function getSafeDate(date: any): Date {
+    return date instanceof Date ? date : (date as any)?.toDate ? (date as any).toDate() : new Date(date);
+}
+
 function formatTimeAgo(date: any): string {
     if (!date) return '';
-    const d = date instanceof Date ? date : (date as any)?.toDate ? (date as any).toDate() : new Date();
+    const d = getSafeDate(date);
     const seconds = Math.floor((new Date().getTime() - d.getTime()) / 1000);
     if (seconds < 60) return 'Just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
@@ -58,7 +63,7 @@ function formatTimeAgo(date: any): string {
 
 function formatDate(date: any): string {
     if (!date) return 'N/A';
-    const d = date instanceof Date ? date : (date as any)?.toDate ? (date as any).toDate() : new Date();
+    const d = getSafeDate(date);
     return new Intl.DateTimeFormat('en-US', {
         year: 'numeric',
         month: 'short',
@@ -68,34 +73,45 @@ function formatDate(date: any): string {
     }).format(d);
 }
 
-function getSafeDate(date: any): Date {
-    return date instanceof Date ? date : (date as any)?.toDate ? (date as any).toDate() : new Date(date);
+// --- Check freshness (< 20 mins) ---
+function isTicketNew(date: any): boolean {
+    if (!date) return false;
+    const d = getSafeDate(date);
+    const now = new Date();
+    const diffInMinutes = (now.getTime() - d.getTime()) / 1000 / 60;
+    return diffInMinutes < 20; 
 }
 
 // --- Main Component ---
 
 export default function Tickets() {
-  const { tickets, technicians, assignTicket, fetchTickets, fetchTechnicians } = useStore();
+  const { tickets, technicians, fetchTickets, fetchTechnicians } = useStore();
   const { toast } = useToast();
   
+  // --- Auto-Refresh Logic ---
   useEffect(() => {
     fetchTickets();
     fetchTechnicians();
+
+    const intervalId = setInterval(() => {
+      fetchTickets();
+      fetchTechnicians();
+    }, REFRESH_INTERVAL);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TicketStatus | 'all'>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid'); // Toggle State
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [currentPage, setCurrentPage] = useState(1);
   
   // Dialog States
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   // Selection States
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [selectedTechnician, setSelectedTechnician] = useState('');
 
   // Export Date Range State
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -139,19 +155,6 @@ export default function Tickets() {
 
   // --- Actions ---
 
-  const handleAssign = () => {
-    if (selectedTicket && selectedTechnician) {
-      assignTicket(selectedTicket.id, selectedTechnician);
-      setAssignDialogOpen(false);
-      setSelectedTicket(null);
-      setSelectedTechnician('');
-      toast({
-        title: 'Ticket assigned',
-        description: 'The ticket has been assigned successfully.',
-      });
-    }
-  };
-
   const handleExport = () => {
     if (!dateRange.start || !dateRange.end) {
         toast({ title: "Error", description: "Please select both start and end dates.", variant: "destructive" });
@@ -160,9 +163,8 @@ export default function Tickets() {
 
     const start = new Date(dateRange.start);
     const end = new Date(dateRange.end);
-    end.setHours(23, 59, 59); // Include the entire end day
+    end.setHours(23, 59, 59);
 
-    // Filter tickets for export
     const ticketsToExport = tickets.filter(t => {
         const tDate = getSafeDate(t.createdAt);
         return tDate >= start && tDate <= end;
@@ -173,9 +175,8 @@ export default function Tickets() {
         return;
     }
 
-    // Convert to CSV
     const csvContent = [
-        ["Ticket ID", "Date", "Customer", "Machine", "Status", "Technician", "Description"], // Header
+        ["Ticket ID", "Date", "Customer", "Machine", "Status", "Technician", "Description"],
         ...ticketsToExport.map(t => {
             const tech = technicians.find(tech => tech.id === t.assignedToId)?.name || "Unassigned";
             return [
@@ -190,7 +191,6 @@ export default function Tickets() {
         })
     ].map(e => e.join(",")).join("\n");
 
-    // Download File
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -205,28 +205,19 @@ export default function Tickets() {
     toast({ title: "Export Successful", description: `Downloaded ${ticketsToExport.length} tickets.` });
   };
 
-  const openAssignDialog = (e: React.MouseEvent, ticket: Ticket) => {
-    e.stopPropagation();
-    setSelectedTicket(ticket);
-    setAssignDialogOpen(true);
-  };
-
   const openDetailsDialog = (ticket: Ticket) => {
     setSelectedTicket(ticket);
     setDetailsDialogOpen(true);
   };
-
-  const availableTechnicians = technicians.filter((t) => t.status === 'online' && t.role === 'technician');
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Tickets</h1>
-          <p className="text-muted-foreground mt-1 text-base">Manage and assign service tickets</p>
+          <p className="text-muted-foreground mt-1 text-base">Super Admin View (Read Only)</p>
         </div>
         <div className="flex items-center gap-3">
-            {/* View Toggle */}
             <div className="flex bg-muted p-1 rounded-lg border">
                 <Button 
                     variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
@@ -246,7 +237,6 @@ export default function Tickets() {
                 </Button>
             </div>
             
-            {/* Export Button */}
             <Button variant="outline" size="sm" className="gap-2 h-9 px-4 text-sm" onClick={() => setExportDialogOpen(true)}>
                 <Download className="h-4 w-4" />
                 Export
@@ -293,14 +283,13 @@ export default function Tickets() {
                             <TicketCard
                                 key={ticket.id}
                                 ticket={ticket}
-                                onAssign={(e: React.MouseEvent) => openAssignDialog(e, ticket)}
                                 onClick={() => openDetailsDialog(ticket)}
                             />
                         ))}
                     </div>
                 )}
 
-                {/* --- TABLE VIEW (Bigger & Better) --- */}
+                {/* --- TABLE VIEW --- */}
                 {viewMode === 'table' && (
                     <div className="rounded-lg border shadow-sm bg-white overflow-hidden">
                         <div className="relative w-full overflow-auto">
@@ -321,6 +310,7 @@ export default function Tickets() {
                                     {paginatedTickets.map((ticket, index) => {
                                         const status = statusConfig[ticket.status];
                                         const tech = technicians.find(t => t.id === ticket.assignedToId);
+                                        const isNew = isTicketNew(ticket.createdAt); 
                                         
                                         // Machine Code Parsing
                                         const machineParts = ticket.machineCode ? ticket.machineCode.split('|') : [];
@@ -331,26 +321,36 @@ export default function Tickets() {
                                             <tr 
                                                 key={ticket.id} 
                                                 className={cn(
-                                                    "group transition-colors hover:bg-blue-50/50 cursor-pointer",
-                                                    index % 2 === 0 ? "bg-white" : "bg-slate-50/40" // Zebra Striping
+                                                    "group transition-colors cursor-pointer border-l-2", 
+                                                    // Dynamic Background Logic: New vs Standard Zebra
+                                                    isNew 
+                                                        ? "border-l-blue-500 bg-blue-50/20" 
+                                                        : cn(index % 2 === 0 ? "bg-white" : "bg-slate-50/40", "border-l-transparent"),
+                                                    "hover:bg-slate-100"
                                                 )}
                                                 onClick={() => openDetailsDialog(ticket)}
                                             >
                                                 {/* ID */}
                                                 <td className="p-4 border-b border-r last:border-r-0 align-top">
-                                                    <span className="font-mono font-bold text-slate-700 text-sm">
-                                                        {ticket.displayId}
-                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={cn("font-mono font-bold text-sm", isNew ? "text-blue-700" : "text-slate-700")}>
+                                                            {ticket.displayId}
+                                                        </span>
+                                                        {/* Small Dot Indicator for New Tickets */}
+                                                        {isNew && (
+                                                             <span className="h-1.5 w-1.5 rounded-full bg-blue-500" title="New Ticket" />
+                                                        )}
+                                                    </div>
                                                 </td>
 
                                                 {/* Date */}
                                                 <td className="p-4 border-b border-r last:border-r-0 align-top text-slate-600">
                                                     <div className="flex flex-col">
                                                         <span className="font-semibold text-sm text-slate-900">
-                                                            {formatDate(ticket.createdAt).split(',')[0]} {/* Date */}
+                                                            {formatDate(ticket.createdAt).split(',')[0]}
                                                         </span>
                                                         <span className="text-xs text-slate-500 mt-0.5">
-                                                            {formatDate(ticket.createdAt).split(',')[1]} {/* Time */}
+                                                            {formatDate(ticket.createdAt).split(',')[1]}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -366,11 +366,9 @@ export default function Tickets() {
                                                 <td className="p-4 border-b border-r last:border-r-0 align-top">
                                                     {ticket.machineCode ? (
                                                         <div className="flex flex-col items-start gap-1">
-                                                            {/* Serial Number (Bigger) */}
                                                             <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                                                                 {serialNumber}
                                                             </span>
-                                                            {/* Model Name */}
                                                             {modelName && (
                                                                 <span className="text-xs text-slate-500 font-medium line-clamp-1" title={modelName}>
                                                                     {modelName}
@@ -410,21 +408,11 @@ export default function Tickets() {
                                                     )}
                                                 </td>
 
-                                                {/* Actions */}
+                                                {/* Actions - READ ONLY VIEW */}
                                                 <td className="p-4 border-b align-top text-center">
-                                                    {ticket.status === 'new' ? (
-                                                        <Button 
-                                                            size="sm" variant="outline" 
-                                                            className="h-9 text-xs font-medium w-full border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-sm"
-                                                            onClick={(e) => openAssignDialog(e, ticket)}
-                                                        >
-                                                            Assign
-                                                        </Button>
-                                                    ) : (
-                                                        <Button size="sm" variant="ghost" className="h-9 w-full text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100">
-                                                            View
-                                                        </Button>
-                                                    )}
+                                                    <Button size="sm" variant="ghost" className="h-9 w-full text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 gap-2">
+                                                        <Eye className="h-3.5 w-3.5" /> View
+                                                    </Button>
                                                 </td>
                                             </tr>
                                         );
@@ -471,9 +459,13 @@ export default function Tickets() {
         </CardContent>
       </Card>
 
-      {/* DETAIL DIALOG (unchanged structure) */}
+      {/* DETAIL DIALOG */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="hidden">
+                <DialogTitle>Ticket Details</DialogTitle>
+                <DialogDescription>Full ticket information</DialogDescription>
+            </DialogHeader>
             {selectedTicket && (
                 <TicketDetailView 
                     ticket={selectedTicket} 
@@ -483,45 +475,7 @@ export default function Tickets() {
         </DialogContent>
       </Dialog>
 
-      {/* ASSIGN DIALOG (unchanged structure) */}
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign Ticket</DialogTitle>
-            <DialogDescription>
-              Select a technician to assign {selectedTicket?.displayId}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Select value={selectedTechnician} onValueChange={setSelectedTechnician}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a technician" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableTechnicians.length === 0 ? (
-                  <SelectItem value="none" disabled>No technicians available</SelectItem>
-                ) : (
-                  availableTechnicians.map((tech) => (
-                    <SelectItem key={tech.id} value={tech.id}>
-                      <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 bg-success rounded-full" />
-                        <span>{tech.name}</span>
-                        <span className="text-muted-foreground">({tech.activeJobs} jobs)</span>
-                      </div>
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAssign} disabled={!selectedTechnician}>Assign Ticket</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* EXPORT DIALOG (unchanged structure) */}
+      {/* EXPORT DIALOG */}
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -564,7 +518,7 @@ export default function Tickets() {
   );
 }
 
-// --- Ticket Detail Component (Same as before) ---
+// --- Ticket Detail Component ---
 function TicketDetailView({ ticket, technicians }: { ticket: Ticket, technicians: any[] }) {
     const status = statusConfig[ticket.status];
     
@@ -606,7 +560,8 @@ function TicketDetailView({ ticket, technicians }: { ticket: Ticket, technicians
             </div>
 
             {/* Assignment Info Section (Technician + Assigned Date) */}
-            {(ticket.status !== 'new' && ticket.status !== 'declined') && (
+            {/* MODIFIED: Show for DECLINED tickets too so Admin knows who declined it */}
+            {(ticket.status !== 'new') && (
                 <div className="bg-blue-50/60 border border-blue-100 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     
                     {/* Left: Technician Info */}
@@ -615,7 +570,9 @@ function TicketDetailView({ ticket, technicians }: { ticket: Ticket, technicians
                             <UserCheck className="h-5 w-5" />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">Assigned Technician</p>
+                            <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">
+                                {ticket.status === 'declined' ? 'Last Assigned To' : 'Assigned Technician'}
+                            </p>
                             <p className="text-sm font-semibold text-gray-900">{assignedTech ? assignedTech.name : 'Unknown Technician'}</p>
                         </div>
                     </div>
@@ -695,12 +652,16 @@ function TicketDetailView({ ticket, technicians }: { ticket: Ticket, technicians
     )
 }
 
-// --- Ticket Card (Same as before) ---
-function TicketCard({ ticket, onAssign, onClick }: any) {
-    const status = statusConfig[ticket.status];
+// --- Ticket Card (Updated with standard border, no glow) ---
+function TicketCard({ ticket, onClick }: any) {
+    const status = statusConfig[ticket.status as TicketStatus];
+    const isNew = isTicketNew(ticket.createdAt);
     
     return (
-        <div onClick={onClick} className="group border rounded-xl p-0 hover:shadow-lg hover:border-primary/30 transition-all cursor-pointer bg-card relative overflow-hidden">
+        <div 
+            onClick={onClick} 
+            className="group border rounded-xl p-0 transition-all cursor-pointer bg-card relative overflow-hidden hover:shadow-lg hover:border-primary/30"
+        >
             <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", status.bgColor.replace('/10', '').replace('-50', '-500'))} />
             <div className="flex flex-col p-4 pl-5">
                  <div className="flex justify-between items-start mb-2">
@@ -710,6 +671,14 @@ function TicketCard({ ticket, onAssign, onClick }: any) {
                             <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
                                 {ticket.displayId}
                             </span>
+                            
+                            {/* NEW BADGE (Kept as indicator, no glow) */}
+                            {isNew && (
+                                <span className="flex items-center gap-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                                    NEW
+                                </span>
+                            )}
+
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 {formatTimeAgo(ticket.createdAt)}
@@ -737,11 +706,7 @@ function TicketCard({ ticket, onAssign, onClick }: any) {
                             <div className="text-xs text-muted-foreground italic">No Machine Code</div>
                         )}
                     </div>
-                    {ticket.status === 'new' && (
-                        <Button onClick={(e) => { e.stopPropagation(); onAssign(e); }} size="sm" className="h-8 text-xs gap-1.5 shadow-sm">
-                            <User className="h-3.5 w-3.5" /> Assign
-                        </Button>
-                    )}
+                    {/* READ ONLY: No Actions here */}
                  </div>
             </div>
         </div>

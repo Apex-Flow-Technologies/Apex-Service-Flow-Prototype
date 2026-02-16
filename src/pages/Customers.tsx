@@ -101,7 +101,7 @@ export default function Customers() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Pagination & Sort State (Added these)
+  // Pagination & Sort State
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [pageHistory, setPageHistory] = useState<QueryDocumentSnapshot<DocumentData>[]>([]);
   const [page, setPage] = useState(1);
@@ -146,6 +146,35 @@ export default function Customers() {
       setTotalCount(snapshot.data().count);
     } catch (error) {
       console.error("Error fetching count:", error);
+    }
+  };
+
+  // --- NEW: SERVER SIDE SEARCH ---
+  const performSearch = async (searchTerm: string) => {
+    setIsLoading(true);
+    try {
+      // NOTE: Firestore search is case-sensitive by default.
+      // This query looks for names starting with the search term.
+      // Example: 'Joh' will match 'John', 'Johnny'.
+      const q = query(
+        collection(db, "user"),
+        where("role", "==", "user"),
+        where("name", ">=", searchTerm),
+        where("name", "<=", searchTerm + '\uf8ff'),
+        limit(50) 
+      );
+
+      const snap = await getDocs(q);
+      const data = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      
+      setCustomers(data);
+      // We do not set pagination data (lastDoc, page) during search
+      // because search results are a temporary view.
+    } catch (error) {
+      console.error("Error searching:", error);
+      toast({ title: "Search failed", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -243,6 +272,8 @@ export default function Customers() {
 
   const handleJumpToPage = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(search) return; // Disable jump when searching
+
     const targetPage = parseInt(jumpPage);
     const maxPage = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -286,7 +317,7 @@ export default function Customers() {
             
             setCustomers(data);
             setLastDoc(snap.docs[snap.docs.length - 1]);
-            setPageHistory([]); // Reset history on jump
+            setPageHistory([]); 
             setPage(targetPage);
         }
     } catch (error) {
@@ -313,10 +344,27 @@ export default function Customers() {
     }
   };
 
+  // --- CHANGED: SEARCH EFFECT ---
+  // Debounce search so we don't query DB on every keystroke
   useEffect(() => {
-    fetchFirstPage();
+    const delayDebounceFn = setTimeout(() => {
+      if (search.trim()) {
+        performSearch(search);
+      } else {
+        // If search is cleared, go back to normal pagination
+        fetchFirstPage(); 
+      }
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, sortField, sortDir]); // Re-run if search or sort changes
+
+  useEffect(() => {
+    // Initial loads
     fetchMachines();
-  }, [sortField, sortDir]);
+    // We removed fetchFirstPage() from here because the Search Effect above 
+    // handles the initial load (when search is empty string on mount).
+  }, []);
 
   // ---------------- HELPERS ----------------
   const getMachineLabel = (m: any) => m?.machineCode || "Unnamed Machine";
@@ -340,7 +388,6 @@ export default function Customers() {
 
   // ---------------- VALIDATION ----------------
   const validateInputs = (data: any, isEditMode: boolean) => {
-    // Simple validation logic
     if (!data.name || data.name.trim().length < 2) return false;
     if (!data.username || data.username.trim().length < 3) return false;
     if (!data.phone || data.phone.length !== 10) return false;
@@ -350,10 +397,8 @@ export default function Customers() {
 
   // ---------------- HANDLERS ----------------
 
-  // 1. Handle Edit Click - ROBUST MAPPING
   const handleEditClick = (customer: any) => {
     setEditCustomer(customer);
-    // Explicitly map fields, default to empty string if undefined
     setEditForm({
       name: customer.name || "",
       phone: customer.phone || "",
@@ -366,7 +411,6 @@ export default function Customers() {
   const saveCustomerEdits = async () => {
     if (!editCustomer?.id) return;
 
-    // Validate
     if (!validateInputs(editForm, true)) {
       toast({ title: "Validation Error", description: "Please fix inputs.", variant: "destructive" });
       return;
@@ -382,13 +426,11 @@ export default function Customers() {
         username: editForm.username,
       };
 
-      // Only update password if the user typed something
       if (editForm.password.trim() !== "") {
         updateData.password = editForm.password;
       }
       await updateDoc(docRef, updateData);
 
-      // Update Local State (Immediate UI change)
       setCustomers((prev) =>
         prev.map((c) => c.id === editCustomer.id ? { ...c, ...updateData } : c)
       );
@@ -415,11 +457,13 @@ export default function Customers() {
         createdAt: serverTimestamp(),
       });
 
-      // Add to local list immediately
-      setCustomers((prev) => [
-        { id: newDoc.id, ...form, role: "user" },
-        ...prev,
-      ]);
+      // Only add to local list if search is empty (otherwise it might look weird)
+      if(!search) {
+          setCustomers((prev) => [
+            { id: newDoc.id, ...form, role: "user" },
+            ...prev,
+          ]);
+      }
 
       toast({ title: "Customer created" });
       setForm({ name: "", phone: "", address: "", username: "", password: "" });
@@ -445,10 +489,7 @@ export default function Customers() {
   const deleteCustomer = async (customer: any) => {
     if(!confirm("Are you sure?")) return;
     
-    // Unassign all machines locally first
     setMachines(prev => prev.map(m => m.assignedTo === customer.id ? { ...m, assignedTo: null } : m));
-    
-    // Remove customer locally
     setCustomers(prev => prev.filter(c => c.id !== customer.id));
 
     try {
@@ -465,10 +506,9 @@ export default function Customers() {
     }
   };
 
-  const filteredCustomers = customers.filter((c) =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) || 
-    c.username?.toLowerCase().includes(search.toLowerCase())
-  );
+  // REMOVED client-side filtering. 
+  // 'customers' now contains exactly what needs to be shown (page data OR search data)
+  const filteredCustomers = customers;
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -532,12 +572,12 @@ export default function Customers() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex justify-between items-center">
-            <CardTitle>Customer List <span className="ml-2 text-sm text-muted-foreground font-normal">({totalCount} total)</span></CardTitle>
+            <CardTitle>Customer List <span className="ml-2 text-sm text-muted-foreground font-normal">({search ? 'Search Results' : totalCount + ' total'})</span></CardTitle>
             
             <div className="flex items-center gap-2">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2">
+                        <Button variant="outline" size="sm" className="gap-2" disabled={!!search}>
                             <ArrowUpDown className="h-4 w-4" /> Sort
                         </Button>
                     </DropdownMenuTrigger>
@@ -556,7 +596,7 @@ export default function Customers() {
                 <div className="relative w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search this page..."
+                        placeholder="Search by name..."
                         className="pl-9"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -589,7 +629,9 @@ export default function Customers() {
                   ))
               ) : filteredCustomers.length === 0 ? (
                  <TableRow>
-                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No customers found on this page.</TableCell>
+                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                        {search ? "No customers found matching that name." : "No customers found."}
+                    </TableCell>
                  </TableRow>
               ) : (
                 filteredCustomers.map((c) => (
@@ -626,36 +668,38 @@ export default function Customers() {
           </Table>
         </CardContent>
         
-        {/* RIGHT ALIGNED PAGINATION */}
-        <CardFooter className="flex items-center justify-end gap-6 border-t py-4">
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Go to:</span>
-                <form onSubmit={handleJumpToPage} className="flex items-center">
-                    <Input 
-                        type="number" 
-                        min={1} 
-                        max={totalPages} 
-                        value={jumpPage}
-                        onChange={(e) => setJumpPage(e.target.value)}
-                        className="h-8 w-16 text-center"
-                        placeholder="#"
-                    />
-                </form>
-            </div>
+        {/* RIGHT ALIGNED PAGINATION - DISABLED DURING SEARCH */}
+        {!search && (
+            <CardFooter className="flex items-center justify-end gap-6 border-t py-4">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Go to:</span>
+                    <form onSubmit={handleJumpToPage} className="flex items-center">
+                        <Input 
+                            type="number" 
+                            min={1} 
+                            max={totalPages} 
+                            value={jumpPage}
+                            onChange={(e) => setJumpPage(e.target.value)}
+                            className="h-8 w-16 text-center"
+                            placeholder="#"
+                        />
+                    </form>
+                </div>
 
-            <div className="text-sm font-medium">
-                Page {page} of {totalPages || 1}
-            </div>
+                <div className="text-sm font-medium">
+                    Page {page} of {totalPages || 1}
+                </div>
 
-            <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={fetchPrevPage} disabled={page === 1 || isLoading}>
-                    <ChevronLeft className="h-4 w-4 mr-1" /> Prev
-                </Button>
-                <Button variant="outline" size="sm" onClick={fetchNextPage} disabled={!lastDoc || page >= totalPages || isLoading}>
-                    Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-            </div>
-        </CardFooter>
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={fetchPrevPage} disabled={page === 1 || isLoading}>
+                        <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={fetchNextPage} disabled={!lastDoc || page >= totalPages || isLoading}>
+                        Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </div>
+            </CardFooter>
+        )}
       </Card>
 
       {/* ---------------- ADD DIALOG ---------------- */}

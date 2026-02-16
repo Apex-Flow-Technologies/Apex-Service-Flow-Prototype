@@ -11,7 +11,8 @@ import {
   startAfter,
   serverTimestamp,
   QueryDocumentSnapshot,
-  DocumentData
+  DocumentData,
+  where
 } from "firebase/firestore";
 import { db } from "@/firebase";
 
@@ -192,6 +193,33 @@ export default function Machines() {
     }
   };
 
+  // --- NEW: SERVER SIDE SEARCH ---
+  const performSearch = async (searchTerm: string) => {
+    setIsLoading(true);
+    try {
+        // Firestore prefix search
+        const q = query(
+            collection(db, "machines"),
+            where("machineCode", ">=", searchTerm),
+            where("machineCode", "<=", searchTerm + '\uf8ff'),
+            limit(50)
+        );
+
+        const snap = await getDocs(q);
+        setMachines(snap.docs.map((m: any) => ({
+            id: m.id,
+            ...m.data(),
+            status: normalizeStatus(m.data().status),
+        })));
+        
+        // We don't manage page history during search
+    } catch (error) {
+        console.error("Search error:", error);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   const fetchNextPage = async () => {
     if (!lastDoc) return;
     setIsLoading(true);
@@ -290,10 +318,24 @@ export default function Machines() {
     }
   };
 
+  // --- SEARCH & SORT EFFECT ---
   useEffect(() => {
-    fetchFirstPage();
+    const delayDebounceFn = setTimeout(() => {
+        if (search.trim()) {
+            performSearch(search);
+        } else {
+            fetchFirstPage();
+        }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, sortField, sortDir]);
+
+  useEffect(() => {
+    // We removed explicit fetchFirstPage() here because the Search Effect 
+    // above runs on mount (search="") and handles the initial load.
     loadUsers();
-  }, [sortField, sortDir]);
+  }, []);
 
   const getCustomerName = (id: string | null) => {
       if(!id) return "Unassigned";
@@ -365,7 +407,8 @@ export default function Machines() {
 
     setIsAddDialogOpen(false);
     setAddForm({ serial: "", name: "" });
-    fetchFirstPage();
+    // Refresh handled by effect or manual trigger depending on search state
+    if (!search) fetchFirstPage(); 
     toast({ title: "Machine Added" });
   };
 
@@ -413,7 +456,9 @@ export default function Machines() {
       setIsEditOpen(false);
       setEditMachineId(null);
       setEditForm({ serial: "", name: "" });
-      fetchFirstPage(); // Refresh to show updates
+      
+      // Update local state without full refetch if possible, or refetch
+      setMachines(prev => prev.map(m => m.id === editMachineId ? {...m, machineCode: fullCode} : m));
       toast({ title: "Machine Updated" });
     } catch (error) {
       toast({ title: "Update failed", variant: "destructive" });
@@ -424,7 +469,7 @@ export default function Machines() {
     if(!confirm("Are you sure?")) return;
     try {
         await deleteDoc(doc(db, "machines", id));
-        fetchFirstPage();
+        setMachines(prev => prev.filter(m => m.id !== id));
         toast({ title: "Machine Removed" });
     } catch (e) {
         toast({ title: "Error deleting", variant: "destructive"});
@@ -552,7 +597,7 @@ export default function Machines() {
     setUploading(false);
     setIsUploadOpen(false);
     setUploadRows([]);
-    fetchFirstPage(); // Refresh list to show new uploads
+    if(!search) fetchFirstPage(); // Refresh list to show new uploads
 
     toast({
       title: "Bulk upload completed",
@@ -560,11 +605,8 @@ export default function Machines() {
     });
   };
 
-  const filteredMachines = machines.filter(
-    (m) =>
-      typeof m.machineCode === "string" &&
-      m.machineCode.toLowerCase().includes(search.toLowerCase())
-  );
+  // Client-side filtering REMOVED. Using direct 'machines' state.
+  const displayMachines = machines;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -701,7 +743,7 @@ export default function Machines() {
                 {/* SORT MENU */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2">
+                        <Button variant="outline" size="sm" className="gap-2" disabled={!!search}>
                             <ArrowUpDown className="h-4 w-4" /> Sort
                         </Button>
                     </DropdownMenuTrigger>
@@ -749,14 +791,14 @@ export default function Machines() {
                           <TableCell/>
                       </TableRow>
                   ))
-              ) : filteredMachines.length === 0 ? (
+              ) : displayMachines.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
-                    No machines found.
+                    {search ? "No machines found matching that code." : "No machines found."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredMachines.map((m) => (
+                displayMachines.map((m) => (
                   <TableRow key={m.id} className="hover:bg-slate-50">
                     <TableCell className="font-mono font-medium text-sm">
                       {m.machineCode}
@@ -795,30 +837,32 @@ export default function Machines() {
             </TableBody>
           </Table>
         </CardContent>
-        {/* PAGINATION FOOTER */}
-        <CardFooter className="flex items-center justify-between border-t py-4">
-            <div className="text-sm text-muted-foreground">
-                Page {page}
-            </div>
-            <div className="flex gap-2">
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={fetchPrevPage} 
-                    disabled={page === 1 || isLoading}
-                >
-                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                </Button>
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={fetchNextPage} 
-                    disabled={!hasMore || isLoading}
-                >
-                    Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-            </div>
-        </CardFooter>
+        {/* PAGINATION FOOTER - Hidden during search */}
+        {!search && (
+            <CardFooter className="flex items-center justify-between border-t py-4">
+                <div className="text-sm text-muted-foreground">
+                    Page {page}
+                </div>
+                <div className="flex gap-2">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={fetchPrevPage} 
+                        disabled={page === 1 || isLoading}
+                    >
+                        <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={fetchNextPage} 
+                        disabled={!hasMore || isLoading}
+                    >
+                        Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </div>
+            </CardFooter>
+        )}
       </Card>
 
       {/* --- ADD MACHINE DIALOG --- */}

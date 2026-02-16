@@ -14,7 +14,6 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/firebase";
 
-
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,59 +29,45 @@ export default function Login() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
+    e.preventDefault();
+    setIsLoading(true);
 
-  try {
-    // Firebase Login
-    const userCred = await signInWithEmailAndPassword(
-      auth,
-      email,
-      password
-    );
+    try {
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const uid = userCred.user.uid;
+      const userDoc = await getDoc(doc(db, "user", uid));
 
-    const uid = userCred.user.uid;
+      if (!userDoc.exists()) {
+        throw new Error("No user record found");
+      }
 
-    // Get role from Firestore (user collection)
-    const userDoc = await getDoc(doc(db, "user", uid));
+      const userData = userDoc.data();
+      login(email, password);
 
-    if (!userDoc.exists()) {
-      throw new Error("No user record found");
+      toast({
+        title: "Welcome back!",
+        description: `Logged in as ${userData.role}`,
+      });
+
+      navigate("/dashboard");
+
+    } catch (err) {
+      console.log(err);
+      toast({
+        title: "Error",
+        description: "Invalid email or password",
+        variant: "destructive",
+      });
     }
-
-    const userData = userDoc.data();
-
-    // Save in store
-    login(email, password);
-
-    toast({
-      title: "Welcome back!",
-      description: `Logged in as ${userData.role}`,
-    });
-
-    navigate("/dashboard");
-
-  } catch (err) {
-    console.log(err);
-
-    toast({
-      title: "Error",
-      description: "Invalid email or password",
-      variant: "destructive",
-    });
-  }
-
-  setIsLoading(false);
-};
+    setIsLoading(false);
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/5 via-background to-background" />
       
       <Card className="w-full max-w-md relative z-10 shadow-elevated animate-scale-in">
         <CardHeader className="text-center pb-2">
-          {/* Logo */}
           <div className="mx-auto mb-4">
             <img src={logo} alt="Techno Bright" className="h-16 w-auto mx-auto" />
           </div>
@@ -126,9 +111,14 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {/* Logic matched to your sample images */}
+                  {showPassword ? (
+                    <Eye className="h-4 w-4 text-primary" /> 
+                  ) : (
+                    <EyeOff className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -148,10 +138,6 @@ export default function Login() {
               )}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { 
   Search, User, Clock, CheckCircle2, XCircle, ArrowRight, 
   Calendar, UploadCloud, Monitor, UserCheck, LayoutGrid, List, 
-  Download, ChevronLeft, ChevronRight, FileSpreadsheet, Eye
+  Download, ChevronLeft, ChevronRight, FileSpreadsheet, Eye,
+  Trash2, AlertTriangle, CheckSquare, Square, Loader2
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +27,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { useStore, Ticket } from '@/store';
 import { useToast } from '@/hooks/use-toast';
@@ -42,7 +54,14 @@ const statusConfig: Record<TicketStatus, { label: string; color: string; bgColor
   assigned: { label: 'Assigned', color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200', icon: User },
   'in-progress': { label: 'In Progress', color: 'text-amber-600', bgColor: 'bg-amber-50', borderColor: 'border-amber-200', icon: ArrowRight },
   completed: { label: 'Completed', color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-200', icon: CheckCircle2 },
-  declined: { label: 'Declined', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-200', icon: XCircle },
+  declined: { label: 'Declined', color: 'text-red-600', bgColor: 'bg-slate-100', borderColor: 'border-slate-200', icon: XCircle },
+};
+
+const priorityConfig: Record<Ticket['priority'], { label: string; color: string; bgColor: string; borderColor: string }> = {
+  low: { label: 'Low', color: 'text-slate-600', bgColor: 'bg-slate-50', borderColor: 'border-slate-200' },
+  medium: { label: 'Medium', color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
+  high: { label: 'High', color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-200' },
+  urgent: { label: 'Urgent', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-200' },
 };
 
 // --- Helper Functions ---
@@ -85,20 +104,18 @@ function isTicketNew(date: any): boolean {
 // --- Main Component ---
 
 export default function Tickets() {
-  const { tickets, technicians, fetchTickets, fetchTechnicians } = useStore();
+  const { tickets, technicians, listenToTickets, listenToTechnicians, updateTicket, addInternalNote } = useStore();
   const { toast } = useToast();
   
-  // --- Auto-Refresh Logic ---
+  // --- Auto-Refresh Logic (Now Real-time Listeners) ---
   useEffect(() => {
-    fetchTickets();
-    fetchTechnicians();
+    const unsubTickets = listenToTickets();
+    const unsubTechs = listenToTechnicians();
 
-    const intervalId = setInterval(() => {
-      fetchTickets();
-      fetchTechnicians();
-    }, REFRESH_INTERVAL);
-
-    return () => clearInterval(intervalId);
+    return () => {
+      unsubTickets();
+      unsubTechs();
+    };
   }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +129,12 @@ export default function Tickets() {
 
   // Selection States
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+
+  const { deleteTickets } = useStore();
 
   // Export Date Range State
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -210,6 +233,43 @@ export default function Tickets() {
     setDetailsDialogOpen(true);
   };
 
+  const toggleSelect = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedTickets.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedTickets.map(t => t.id));
+    }
+  };
+
+  const handleDeleteTickets = async (ids: string[]) => {
+    setIsDeleting(true);
+    try {
+      await deleteTickets(ids);
+      setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
+      toast({
+        title: "Success",
+        description: `${ids.length} ticket(s) deleted successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete tickets. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirmOpen(false);
+      setBulkDeleteConfirmOpen(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -218,6 +278,25 @@ export default function Tickets() {
           <p className="text-muted-foreground mt-1 text-base">Super Admin View (Read Only)</p>
         </div>
         <div className="flex items-center gap-3">
+            {viewMode === 'grid' && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                        "h-9 px-3 gap-2",
+                        selectedIds.length === paginatedTickets.length && paginatedTickets.length > 0 && "bg-blue-50 border-blue-200 text-blue-600"
+                    )}
+                    onClick={toggleSelectAll}
+                >
+                    {selectedIds.length === paginatedTickets.length && paginatedTickets.length > 0 ? (
+                        <CheckSquare className="h-4 w-4" />
+                    ) : (
+                        <Square className="h-4 w-4" />
+                    )}
+                    Select All
+                </Button>
+            )}
+
             <div className="flex bg-muted p-1 rounded-lg border">
                 <Button 
                     variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
@@ -278,15 +357,35 @@ export default function Tickets() {
                 <>
                 {/* --- GRID VIEW --- */}
                 {viewMode === 'grid' && (
-                    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                    <motion.div 
+                        className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+                        initial="hidden"
+                        animate="show"
+                        variants={{
+                            show: {
+                                transition: {
+                                    staggerChildren: 0.05
+                                }
+                            }
+                        }}
+                    >
                         {paginatedTickets.map((ticket) => (
-                            <TicketCard
+                            <motion.div
                                 key={ticket.id}
-                                ticket={ticket}
-                                onClick={() => openDetailsDialog(ticket)}
-                            />
+                                variants={{
+                                    hidden: { opacity: 0, scale: 0.95 },
+                                    show: { opacity: 1, scale: 1 }
+                                }}
+                            >
+                                <TicketCard
+                                    ticket={ticket}
+                                    isSelected={selectedIds.includes(ticket.id)}
+                                    onSelect={(e) => toggleSelect(ticket.id, e)}
+                                    onClick={() => openDetailsDialog(ticket)}
+                                />
+                            </motion.div>
                         ))}
-                    </div>
+                    </motion.div>
                 )}
 
                 {/* --- TABLE VIEW --- */}
@@ -296,6 +395,20 @@ export default function Tickets() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-slate-100 text-slate-600">
                                     <tr>
+                                        <th className="h-12 px-4 py-3 border-b border-r w-[50px] text-center">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-8 w-8 p-0"
+                                                onClick={(e) => { e.stopPropagation(); toggleSelectAll(); }}
+                                            >
+                                                {selectedIds.length === paginatedTickets.length && paginatedTickets.length > 0 ? (
+                                                    <CheckSquare className="h-4 w-4 text-blue-600" />
+                                                ) : (
+                                                    <Square className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </th>
                                         <th className="h-12 px-4 py-3 font-semibold text-sm border-b border-r last:border-r-0 w-[140px]">Ticket ID</th>
                                         <th className="h-12 px-4 py-3 font-semibold text-sm border-b border-r last:border-r-0 w-[180px]">Date</th>
                                         <th className="h-12 px-4 py-3 font-semibold text-sm border-b border-r last:border-r-0 w-[200px]">Customer</th>
@@ -330,6 +443,22 @@ export default function Tickets() {
                                                 )}
                                                 onClick={() => openDetailsDialog(ticket)}
                                             >
+                                                {/* Checkbox */}
+                                                <td className="p-4 border-b border-r last:border-r-0 align-top text-center" onClick={(e) => e.stopPropagation()}>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => toggleSelect(ticket.id)}
+                                                    >
+                                                        {selectedIds.includes(ticket.id) ? (
+                                                            <CheckSquare className="h-4 w-4 text-blue-600" />
+                                                        ) : (
+                                                            <Square className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </td>
+                                                
                                                 {/* ID */}
                                                 <td className="p-4 border-b border-r last:border-r-0 align-top">
                                                     <div className="flex items-center gap-2">
@@ -512,170 +641,284 @@ export default function Tickets() {
                    <FileSpreadsheet className="h-4 w-4" /> Download CSV
                </Button>
             </DialogFooter>
-          </DialogContent>
+            </DialogContent>
       </Dialog>
+
+      {/* BULK ACTION BAR */}
+      {selectedIds.length > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-6 animate-in fade-in slide-in-from-bottom-4 z-50">
+              <span className="text-sm font-medium">{selectedIds.length} tickets selected</span>
+              <div className="h-6 w-px bg-slate-700" />
+              <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-white hover:bg-slate-800 hover:text-white"
+                    onClick={() => setSelectedIds([])}
+                  >
+                      Cancel
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => setBulkDeleteConfirmOpen(true)}
+                  >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected
+                  </Button>
+              </div>
+          </div>
+      )}
+
+      {/* BULK DELETE CONFIRMATION */}
+      <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-red-600" />
+                      Delete {selectedIds.length} Tickets?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                      This will permanently delete the selected tickets and all their Cloudinary attachments. This action cannot be undone.
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={() => handleDeleteTickets(selectedIds)}
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={isDeleting}
+                  >
+                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Delete"}
+                  </AlertDialogAction>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 // --- Ticket Detail Component ---
+// --- Ticket Detail Component ---
 function TicketDetailView({ ticket, technicians }: { ticket: Ticket, technicians: any[] }) {
+    const { updateTicket, addInternalNote } = useStore();
+    const [note, setNote] = useState('');
     const status = statusConfig[ticket.status];
+    const priority = priorityConfig[ticket.priority];
     
-    // Find assigned technician name
     const assignedTech = ticket.assignedToId 
         ? technicians.find(t => t.id === ticket.assignedToId) 
         : null;
 
+    const handleAddNote = () => {
+        if (!note.trim()) return;
+        addInternalNote(ticket.id, note);
+        setNote('');
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
             {/* Header Section */}
-            <div className="flex items-start justify-between border-b pb-4">
-                <div className="space-y-1.5 w-full">
-                      <div className="flex justify-between items-start w-full mb-2">
-                        <div className="flex flex-col">
-                            <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit mb-1">
-                                {ticket.displayId}
-                            </span>
-                            <h2 className="text-2xl font-bold text-foreground">{ticket.customerName || "Unknown Customer"}</h2>
-                        </div>
-                        
-                        {/* Status Badge */}
-                        <div className={cn("inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border", status.bgColor, status.color, status.borderColor)}>
-                            <status.icon className="h-3.5 w-3.5" />
+            <div className="flex flex-col gap-4 border-b pb-6">
+                <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                        <span className="font-mono text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded uppercase tracking-tighter">
+                            {ticket.displayId}
+                        </span>
+                        <h2 className="text-2xl font-bold text-foreground mt-2">{ticket.customerName}</h2>
+                    </div>
+                    
+                    <div className="flex flex-col items-end gap-2">
+                        <Badge variant="outline" className={cn("h-7 px-3 text-xs font-bold uppercase tracking-widest", status.bgColor, status.color, status.borderColor)}>
                             {status.label}
-                        </div>
-                      </div>
-                    
-                    {/* CREATED DATE */}
-                    <div className="flex items-center gap-3 text-muted-foreground text-sm">
-                        <div className="flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5" />
-                            <span>Created: {formatDate(ticket.createdAt)}</span>
-                        </div>
-                        <span>•</span>
-                        <div className="font-medium text-foreground">{ticket.title}</div>
+                        </Badge>
+                        <Select 
+                            value={ticket.priority} 
+                            onValueChange={(v: any) => updateTicket(ticket.id, { priority: v })}
+                        >
+                            <SelectTrigger className={cn("h-7 w-[100px] text-[10px] font-bold uppercase", priority.bgColor, priority.color, priority.borderColor)}>
+                                <SelectValue placeholder="Priority" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                                <SelectItem value="urgent">Urgent</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4" />
+                        <span>{formatDate(ticket.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <User className="h-4 w-4" />
+                        <span className="font-medium text-foreground">{ticket.title}</span>
                     </div>
                 </div>
             </div>
 
-            {/* Assignment Info Section (Technician + Assigned Date) */}
-            {/* MODIFIED: Show for DECLINED tickets too so Admin knows who declined it */}
-            {(ticket.status !== 'new') && (
-                <div className="bg-blue-50/60 border border-blue-100 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    
-                    {/* Left: Technician Info */}
-                    <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                            <UserCheck className="h-5 w-5" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">
-                                {ticket.status === 'declined' ? 'Last Assigned To' : 'Assigned Technician'}
-                            </p>
-                            <p className="text-sm font-semibold text-gray-900">{assignedTech ? assignedTech.name : 'Unknown Technician'}</p>
-                        </div>
-                    </div>
-                    
-                    {/* Right: Assigned Date Info */}
-                    {ticket.assignedAt ? (
-                        <div className="flex items-center gap-3 sm:text-right">
-                             <div className="hidden sm:block h-8 w-px bg-blue-200" /> {/* Vertical Divider */}
-                             <div>
-                                <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">Assigned On</p>
-                                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mt-0.5">
-                                    <Clock className="h-3.5 w-3.5 text-blue-500" />
-                                    <span>{formatDate(ticket.assignedAt)}</span>
+            {/* Content Tabs */}
+            <Tabs defaultValue="details" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="details">Details</TabsTrigger>
+                    <TabsTrigger value="notes" className="relative">
+                        Internal Notes
+                        {ticket.internalNotes && ticket.internalNotes.length > 0 && (
+                            <span className="ml-2 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full">
+                                {ticket.internalNotes.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="details" className="space-y-6">
+                    {/* Assignment Info */}
+                    {(ticket.status !== 'new') && (
+                        <div className="bg-muted/30 border border-border rounded-xl p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                    <UserCheck className="h-5 w-5" />
                                 </div>
-                             </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Technician</p>
+                                    <p className="text-sm font-semibold">{assignedTech?.name || 'Unknown'}</p>
+                                </div>
+                            </div>
+                            {ticket.assignedAt && (
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Assigned At</p>
+                                    <p className="text-xs font-medium">{formatDate(ticket.assignedAt)}</p>
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <div className="text-xs text-blue-400 italic">Date unavailable</div>
                     )}
-                </div>
-            )}
 
-            {/* Content Section */}
-             <div className="space-y-5">
-                {/* Description */}
-                <div>
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
-                    <p className="text-sm leading-relaxed text-foreground bg-muted/20 p-3 rounded-lg border shadow-sm">
-                        {ticket.description}
-                    </p>
-                </div>
-
-                {/* Highlighted Machine Code */}
-                {ticket.machineCode && (
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg shadow-sm">
-                        <div className="p-2 bg-slate-200 text-slate-700 rounded-md">
-                            <Monitor className="h-5 w-5" />
-                        </div>
+                    {/* Machine & Description */}
+                    <div className="space-y-4">
+                        {ticket.machineCode && (
+                            <div className="flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-100 rounded-lg">
+                                <Monitor className="h-5 w-5 text-blue-600" />
+                                <div>
+                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter">Machine Serial / Model</p>
+                                    <p className="font-mono text-sm font-bold text-blue-900">{ticket.machineCode}</p>
+                                </div>
+                            </div>
+                        )}
                         <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Machine Model / Code</p>
-                            <p className="font-mono font-semibold text-base text-foreground">{ticket.machineCode}</p>
+                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Description</h3>
+                            <div className="text-sm leading-relaxed text-foreground bg-muted/20 p-4 rounded-xl border border-border/50">
+                                {ticket.description}
+                            </div>
                         </div>
                     </div>
-                )}
-            </div>
 
-             {/* Attachments Section */}
-             {(ticket.attachments?.length > 0) && (
-                <div className="space-y-3 pt-2">
-                      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                        <UploadCloud className="h-4 w-4" /> Attachments
-                      </h3>
-                      
-                      {ticket.attachments.some(a => a.type === "audio") && (
-                        <div className="space-y-2">
-                             {ticket.attachments.filter(a => a.type === "audio").map((audio, i) => (
-                                 <div key={i} className="bg-muted/50 p-2 rounded-md border">
-                                      <p className="text-xs text-muted-foreground mb-1 font-medium ml-1">Voice Note {i+1}</p>
-                                      <audio src={audio.url} controls className="w-full h-8" />
-                                 </div>
-                             ))}
+                    {/* Attachments */}
+                    {ticket.attachments && ticket.attachments.length > 0 && (
+                        <div className="space-y-3">
+                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                                <UploadCloud className="h-4 w-4" /> Attachments
+                            </h3>
+                            <div className="flex flex-wrap gap-3">
+                                {ticket.attachments.map((file, i) => (
+                                    <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="group relative">
+                                        {file.type === 'audio' ? (
+                                            <div className="h-20 w-48 bg-muted rounded-lg flex items-center justify-center p-3 border">
+                                                <audio src={file.url} controls className="w-full h-8" />
+                                            </div>
+                                        ) : (
+                                            <img src={file.url} className="h-20 w-20 object-cover rounded-lg border hover:opacity-80 transition-all" alt="att" />
+                                        )}
+                                    </a>
+                                ))}
+                            </div>
                         </div>
-                      )}
+                    )}
+                </TabsContent>
 
-                      {ticket.attachments.some(a => a.type !== "audio") && (
-                          <div className="flex gap-3 overflow-x-auto pb-2">
-                             {ticket.attachments.filter(a => a.type !== "audio").map((file, i) => (
-                                 <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" className="block shrink-0 relative group">
-                                     <img src={file.url} className="h-24 w-24 object-cover rounded-lg border hover:opacity-90 transition-opacity" alt="attachment" />
-                                 </a>
-                             ))}
-                          </div>
-                      )}
-                </div>
-             )}
+                <TabsContent value="notes" className="space-y-4">
+                    <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {!ticket.internalNotes || ticket.internalNotes.length === 0 ? (
+                            <p className="text-center py-8 text-sm text-muted-foreground italic">No internal notes yet.</p>
+                        ) : (
+                            ticket.internalNotes.map((note) => (
+                                <div key={note.id} className="bg-muted/40 p-3 rounded-lg border border-border/50">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[10px] font-bold text-primary uppercase">{note.author}</span>
+                                        <span className="text-[10px] text-muted-foreground">{formatTimeAgo(note.timestamp)}</span>
+                                    </div>
+                                    <p className="text-sm text-foreground">{note.text}</p>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    
+                    <div className="flex gap-2 pt-2">
+                        <Input 
+                            placeholder="Add an internal note..." 
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
+                            className="text-sm"
+                        />
+                        <Button size="sm" onClick={handleAddNote}>
+                            Add
+                        </Button>
+                    </div>
+                </TabsContent>
+            </Tabs>
         </div>
-    )
+    );
 }
 
 // --- Ticket Card (Updated with standard border, no glow) ---
-function TicketCard({ ticket, onClick }: any) {
+function TicketCard({ ticket, onClick, isSelected, onSelect }: any) {
     const status = statusConfig[ticket.status as TicketStatus];
+    const priority = priorityConfig[ticket.priority as Ticket['priority']];
     const isNew = isTicketNew(ticket.createdAt);
     
     return (
         <div 
             onClick={onClick} 
-            className="group border rounded-xl p-0 transition-all cursor-pointer bg-card relative overflow-hidden hover:shadow-lg hover:border-primary/30"
+            className={cn(
+                "group border rounded-xl p-0 transition-all cursor-pointer bg-card relative overflow-hidden hover:shadow-lg hover:border-primary/30",
+                isSelected && "border-blue-500 ring-1 ring-blue-500 bg-blue-50/10"
+            )}
         >
-            <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", status.bgColor.replace('/10', '').replace('-50', '-500'))} />
+            <div className={cn("absolute left-0 top-0 bottom-0 w-1", status.bgColor.replace('/10', '').replace('-50', '-500'))} />
+            
+            <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0 bg-white shadow-sm border"
+                    onClick={onSelect}
+                >
+                    {isSelected ? (
+                        <CheckSquare className="h-4 w-4 text-blue-600" />
+                    ) : (
+                        <Square className="h-4 w-4" />
+                    )}
+                </Button>
+            </div>
+
             <div className="flex flex-col p-4 pl-5">
                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex flex-col">
-                        <h3 className="font-bold text-lg text-foreground leading-tight">{ticket.customerName}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                    <div className="flex flex-col gap-1.5">
+                        <h3 className="font-bold text-lg text-foreground leading-tight line-clamp-1">{ticket.customerName}</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 uppercase">
                                 {ticket.displayId}
                             </span>
                             
-                            {/* NEW BADGE (Kept as indicator, no glow) */}
                             {isNew && (
-                                <span className="flex items-center gap-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                                    NEW
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                                 </span>
                             )}
 
@@ -685,30 +928,38 @@ function TicketCard({ ticket, onClick }: any) {
                             </span>
                         </div>
                     </div>
-                    <Badge variant="outline" className={cn("flex items-center gap-1.5 px-3 py-1 text-xs font-semibold uppercase tracking-wider", status.bgColor, status.color, status.borderColor)}>
-                        <status.icon className="h-3.5 w-3.5" />
+                    <Badge variant="outline" className={cn("whitespace-nowrap px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", status.bgColor, status.color, status.borderColor)}>
                         {status.label}
                     </Badge>
                  </div>
-                 <div className="mt-1 mb-4">
-                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                 
+                 <div className="mt-2 mb-4">
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 min-h-[40px]">
                         {ticket.description}
                     </p>
                  </div>
-                 <div className="flex items-center justify-between pt-3 border-t border-dashed">
-                    <div className="flex items-center">
-                        {ticket.machineCode ? (
-                            <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-md font-medium border border-blue-100">
-                                <Monitor className="h-3.5 w-3.5" />
-                                {ticket.machineCode}
+
+                 <div className="flex items-center justify-between pt-3 border-t border-dashed border-border/60">
+                    <div className="flex items-center gap-2">
+                         <Badge variant="outline" className={cn("h-5 text-[9px] px-1.5", priority.bgColor, priority.color, priority.borderColor)}>
+                            {priority.label}
+                        </Badge>
+                        {ticket.machineCode && (
+                            <div className="flex items-center gap-1 text-[10px] text-blue-600 font-medium">
+                                <Monitor className="h-3 w-3" />
+                                {ticket.machineCode.split('|')[0]}
                             </div>
-                        ) : (
-                            <div className="text-xs text-muted-foreground italic">No Machine Code</div>
                         )}
                     </div>
-                    {/* READ ONLY: No Actions here */}
+                    {ticket.assignedToName && (
+                        <div className="flex items-center gap-1.5">
+                            <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">
+                                {ticket.assignedToName.substring(0,2).toUpperCase()}
+                            </div>
+                        </div>
+                    )}
                  </div>
             </div>
         </div>
-    )
+    );
 }

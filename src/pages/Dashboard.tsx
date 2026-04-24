@@ -1,201 +1,220 @@
 import { 
-  Ticket, 
+  Ticket as TicketIcon, 
   Clock, 
   Users, 
   CheckCircle2,
-  AlertCircle,
-  ArrowUpRight,
-  TrendingUp
+  TrendingUp,
+  Activity as ActivityIcon
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { useEffect } from "react";
-
-// Configuration matches Tickets.tsx
-const REFRESH_INTERVAL = 5000; 
+import { TicketTrendChart, StatusDonutChart, TechnicianPerformanceChart } from '@/components/dashboard/DashboardCharts';
+import { motion } from 'framer-motion';
 
 export default function Dashboard() {
-  // Use the global store instead of local state to ensure data consistency
-  const { tickets, technicians, activities, fetchTickets, fetchTechnicians, listenToActivities } = useStore();
+  const { 
+    tickets, 
+    technicians, 
+    activities, 
+    listenToTickets, 
+    listenToTechnicians, 
+    listenToActivities 
+  } = useStore();
 
-  // --- Auto-Refresh Logic (Same as Tickets Page) ---
   useEffect(() => {
-    // 1. Initial Fetch
-    fetchTickets();
-    fetchTechnicians();
+    const unsubTickets = listenToTickets();
+    const unsubTechs = listenToTechnicians();
+    const unsubActivities = listenToActivities();
 
-    // 2. Poll for updates
-    const intervalId = setInterval(() => {
-      fetchTickets();
-      fetchTechnicians();
-    }, REFRESH_INTERVAL);
-
-    // 3. Listen to activities (Firestore listener)
-    const unsubscribeActivities = listenToActivities();
-
-    // Cleanup
     return () => {
-      clearInterval(intervalId);
-      unsubscribeActivities(); 
+      unsubTickets();
+      unsubTechs();
+      unsubActivities();
     };
   }, []);
-
-  // Corrected Status Logic (Matches Tickets.tsx exactly)
-  const ticketsByStatus = {
-    new: tickets.filter((t) => t.status === 'new').length, 
-    assigned: tickets.filter((t) => t.status === 'assigned').length,
-    'in progress': tickets.filter((t) => t.status === 'in-progress').length, // Fixed hyphen
-    completed: tickets.filter((t) => t.status === 'completed').length,
-    declined: tickets.filter((t) => t.status === 'declined').length,
-  };
 
   const stats = [
     {
       title: 'Total Tickets',
       value: tickets.length,
-      icon: Ticket,
+      icon: TicketIcon,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
+      description: 'Total service requests'
     },
     {
-      title: 'Pending Assignment',
-      value: ticketsByStatus.new, 
+      title: 'Unassigned',
+      value: tickets.filter(t => t.status === 'new').length, 
       icon: Clock,
-      trendUp: false,
-      color: 'text-warning',
-      bgColor: 'bg-warning/10',
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-500/10',
+      description: 'Pending assignment'
     },
     {
       title: 'Active Technicians',
       value: technicians.filter((t) => t.status === 'online').length,
       icon: Users,
-      color: 'text-success',
-      bgColor: 'bg-success/10',
+      color: 'text-green-500',
+      bgColor: 'bg-green-500/10',
+      description: 'Current online'
     },
     {
       title: 'Completed Today',
-      value: ticketsByStatus.completed,
+      value: tickets.filter(t => t.status === 'completed' && new Date(t.updatedAt).toDateString() === new Date().toDateString()).length,
       icon: CheckCircle2,
-      color: 'text-success',
-      bgColor: 'bg-success/10',
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-500/10',
+      description: 'Resolved since midnight'
     },
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Overview of your service operations</p>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-1 text-base">Real-time overview of service operations</p>
+        </div>
+        <Badge variant="outline" className="h-8 gap-2 px-3 border-primary/20 bg-primary/5">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+          </span>
+          Live Sync Active
+        </Badge>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <motion.div 
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+        initial="hidden"
+        animate="show"
+        variants={{
+          show: {
+            transition: {
+              staggerChildren: 0.1
+            }
+          }
+        }}
+      >
         {stats.map((stat) => (
-          <Card key={stat.title} className="hover:shadow-card-hover transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">{stat.title}</p>
-                  <p className="text-3xl font-bold text-foreground">{stat.value}</p>
-                  <div className="flex items-center gap-1">
-                    {/* Trend logic removed for now as per previous code */}
+          <motion.div
+            key={stat.title}
+            variants={{
+              hidden: { opacity: 0, y: 20 },
+              show: { opacity: 1, y: 0 }
+            }}
+          >
+            <Card className="overflow-hidden border-border/50 hover:border-primary/50 transition-all hover:shadow-md">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{stat.title}</p>
+                    <p className="text-3xl font-bold text-foreground">{stat.value}</p>
+                  </div>
+                  <div className={cn('p-2.5 rounded-xl', stat.bgColor)}>
+                    <stat.icon className={cn('h-5 w-5', stat.color)} />
                   </div>
                 </div>
-                <div className={cn('p-3 rounded-lg', stat.bgColor)}>
-                  <stat.icon className={cn('h-5 w-5', stat.color)} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  {stat.description}
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Ticket Status Overview */}
-        <Card className="lg:col-span-1">
+        {/* Ticket Volume Chart */}
+        <Card className="lg:col-span-2 border-border/50">
           <CardHeader>
-            <CardTitle className="text-lg">Ticket Status</CardTitle>
-            <CardDescription>Current distribution by status</CardDescription>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Service Volume Trend
+            </CardTitle>
+            <CardDescription>Tickets created vs. resolved (Last 7 Days)</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <StatusBar label="New" count={ticketsByStatus.new} total={tickets.length} color="bg-primary" />
-            <StatusBar label="Assigned" count={ticketsByStatus.assigned} total={tickets.length} color="bg-blue-500" />
-            <StatusBar label="In Progress" count={ticketsByStatus['in progress']} total={tickets.length} color="bg-amber-500" />
-            <StatusBar label="Completed" count={ticketsByStatus.completed} total={tickets.length} color="bg-green-500" />
-            <StatusBar label="Declined" count={ticketsByStatus.declined} total={tickets.length} color="bg-red-500" />
+          <CardContent className="pt-4">
+            <TicketTrendChart tickets={tickets} />
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">Recent Activity</CardTitle>
-              <CardDescription>Latest actions from your team</CardDescription>
-            </div>
-            <Badge variant="secondary" className="text-xs">
-              Live
-              <span className="ml-1 h-2 w-2 rounded-full bg-success animate-pulse-soft inline-block" />
-            </Badge>
+        {/* Status Distribution */}
+        <Card className="lg:col-span-1 border-border/50">
+          <CardHeader>
+            <CardTitle className="text-lg">Status Distribution</CardTitle>
+            <CardDescription>Breakdown by current state</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <StatusDonutChart tickets={tickets} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Activity Feed */}
+        <Card className="lg:col-span-1 border-border/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ActivityIcon className="h-5 w-5 text-primary" />
+                Live Activity Stream
+              </CardTitle>
+              <CardDescription>Most recent system actions</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {activities.length === 0 ? (
-                 <p className="text-sm text-muted-foreground text-center py-4">No recent activity.</p>
+                <div className="text-center py-12">
+                   <p className="text-sm text-muted-foreground italic">Waiting for activity...</p>
+                </div>
               ) : (
-                  activities.slice(0, 6).map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="flex items-start gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <div className={cn(
-                        'p-2 rounded-lg flex-shrink-0',
-                        activity.type === 'completion' ? 'bg-success/10' :
-                        activity.type === 'assignment' ? 'bg-primary/10' :
-                        activity.type === 'creation' ? 'bg-accent' :
-                        'bg-muted'
-                      )}>
-                        {activity.type === 'completion' ? (
-                          <CheckCircle2 className="h-4 w-4 text-success" />
-                        ) : activity.type === 'assignment' ? (
-                          <ArrowUpRight className="h-4 w-4 text-primary" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground">{activity.action}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatTimeAgo(activity.timestamp)}
-                        </p>
-                      </div>
+                activities.map((activity, idx) => (
+                  <div
+                    key={activity.id}
+                    className={cn(
+                      "flex items-start gap-4 p-4 rounded-xl border border-transparent hover:border-border hover:bg-muted/30 transition-all animate-in slide-in-from-right-4",
+                      idx === 0 && "bg-primary/5 border-primary/10 shadow-sm"
+                    )}
+                  >
+                    <div className={cn(
+                      'p-2 rounded-full flex-shrink-0 shadow-sm',
+                      activity.type === 'completion' ? 'bg-green-500/10 text-green-600' :
+                      activity.type === 'assignment' ? 'bg-primary/10 text-primary' :
+                      activity.type === 'creation' ? 'bg-purple-500/10 text-purple-600' :
+                      'bg-slate-500/10 text-slate-600'
+                    )}>
+                      <ActivityIcon className="h-4 w-4" />
                     </div>
-                  ))
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground leading-snug">{activity.action}</p>
+                      <p className="text-xs text-muted-foreground mt-1 font-mono">
+                        {formatTimeAgo(activity.timestamp)}
+                      </p>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </CardContent>
         </Card>
-      </div>
-    </div>
-  );
-}
 
-function StatusBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
-  const percentage = total > 0 ? (count / total) * 100 : 0;
-  
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium text-foreground">{count}</span>
-      </div>
-      <div className="h-2 bg-muted/50 rounded-full overflow-hidden border border-muted">
-        <div
-          className={cn('h-full rounded-full transition-all duration-500', color)}
-          style={{ width: `${percentage}%` }}
-        />
+         {/* Technician Performance */}
+         <Card className="lg:col-span-2 border-border/50">
+          <CardHeader>
+            <CardTitle className="text-lg">Technician Workload & Performance</CardTitle>
+            <CardDescription>Comparative analysis of completed tasks and current active tickets</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <TechnicianPerformanceChart technicians={technicians} tickets={tickets} />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -203,9 +222,7 @@ function StatusBar({ label, count, total, color }: { label: string; count: numbe
 
 function formatTimeAgo(dateInput: any): string {
   if (!dateInput) return '';
-  // Handle Firestore Timestamp or standard JS Date
-  const date = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
-  
+  const date = new Date(dateInput);
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
   
   if (seconds < 60) return 'Just now';

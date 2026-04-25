@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 
 if (!admin.apps.length) {
+  try {
     const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
     if (!serviceAccountRaw) {
       throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is missing.');

@@ -162,9 +162,11 @@ interface AppState {
   // Auth
   isAuthenticated: boolean;
   currentUser: { id: string; uid: string; name: string; email: string; role: string } | null;
+  isInitializing: boolean;
 
   login: (user: any) => void;
   logout: () => void;
+  setInitializing: (val: boolean) => void;
 
   // Technicians
   technicians: User[];

@@ -15,29 +15,33 @@ import NotFound from "./pages/NotFound";
 import Machines from "./pages/Machines";
 import Customers from "./pages/Customers";
 
+import { AuthProvider } from "./components/auth/AuthProvider";
+
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <CommandPalette />
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/technicians" element={<Technicians />} />
-            <Route path="/tickets" element={<Tickets />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/machines" element={<Machines />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <CommandPalette />
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/technicians" element={<Technicians />} />
+              <Route path="/tickets" element={<Tickets />} />
+              <Route path="/customers" element={<Customers />} />
+              <Route path="/machines" element={<Machines />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

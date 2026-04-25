@@ -54,9 +54,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await adminDb.collection('user').add(userDoc);
 
-    res.json({ success: true, uid: authRecord.uid });
+    return res.json({ success: true, uid: authRecord.uid });
   } catch (error: any) {
-    console.error('Error creating user:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    console.error('Error in create user function:', error);
+    return res.status(500).json({ 
+      error: error.message || 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 }

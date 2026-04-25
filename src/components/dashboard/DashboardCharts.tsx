@@ -14,15 +14,9 @@ import {
   Legend
 } from 'recharts';
 import { Ticket, User } from '@/store';
-import { format, subDays, startOfDay, isSameDay } from 'date-fns';
-
-interface ChartsProps {
-  tickets: Ticket[];
-  technicians: User[];
-}
+import { format, subDays, isSameDay } from 'date-fns';
 
 export function TicketTrendChart({ tickets }: { tickets: Ticket[] }) {
-  // Generate last 7 days of data
   const data = Array.from({ length: 7 }).map((_, i) => {
     const date = subDays(new Date(), 6 - i);
     const count = tickets.filter(t => isSameDay(new Date(t.createdAt), date)).length;
@@ -36,17 +30,17 @@ export function TicketTrendChart({ tickets }: { tickets: Ticket[] }) {
   });
 
   return (
-    <div className="h-[300px] w-full">
+    <div className="h-[250px] md:h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="colorCreated" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
               <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
             </linearGradient>
             <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
@@ -54,12 +48,12 @@ export function TicketTrendChart({ tickets }: { tickets: Ticket[] }) {
             dataKey="name" 
             axisLine={false} 
             tickLine={false} 
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
           />
           <YAxis 
             axisLine={false} 
             tickLine={false} 
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
           />
           <Tooltip 
             contentStyle={{ 
@@ -80,7 +74,7 @@ export function TicketTrendChart({ tickets }: { tickets: Ticket[] }) {
           <Area 
             type="monotone" 
             dataKey="resolved" 
-            stroke="hsl(var(--success))" 
+            stroke="#10b981" 
             fillOpacity={1} 
             fill="url(#colorResolved)" 
             strokeWidth={2}
@@ -100,7 +94,7 @@ export function StatusDonutChart({ tickets }: { tickets: Ticket[] }) {
   ].filter(d => d.value > 0);
 
   return (
-    <div className="h-[300px] w-full flex items-center justify-center">
+    <div className="h-[250px] md:h-[300px] w-full flex items-center justify-center">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -123,7 +117,7 @@ export function StatusDonutChart({ tickets }: { tickets: Ticket[] }) {
               borderRadius: '8px'
             }} 
           />
-          <Legend verticalAlign="bottom" height={36}/>
+          <Legend verticalAlign="bottom" height={36} iconSize={10} wrapperStyle={{ fontSize: '12px' }}/>
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -147,20 +141,20 @@ export function TechnicianPerformanceChart({ technicians, tickets }: { technicia
     .slice(0, 5);
 
   return (
-    <div className="h-[400px] w-full">
+    <div className="h-[300px] md:h-[400px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
+        <BarChart data={data} margin={{ left: -20, right: 10 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
           <XAxis 
             dataKey="name" 
             axisLine={false} 
             tickLine={false} 
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
           />
           <YAxis 
             axisLine={false} 
             tickLine={false} 
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
           />
           <Tooltip 
              contentStyle={{ 

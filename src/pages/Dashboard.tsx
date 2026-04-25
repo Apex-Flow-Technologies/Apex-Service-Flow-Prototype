@@ -73,10 +73,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1 text-base">Real-time overview of service operations</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">Real-time overview of service operations</p>
         </div>
         <Badge variant="outline" className="h-8 gap-2 px-3 border-primary/20 bg-primary/5">
           <span className="relative flex h-2 w-2">
@@ -139,7 +139,7 @@ export default function Dashboard() {
             </CardTitle>
             <CardDescription>Tickets created vs. resolved (Last 7 Days)</CardDescription>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 min-h-[300px]">
             <TicketTrendChart tickets={tickets} />
           </CardContent>
         </Card>
@@ -150,7 +150,7 @@ export default function Dashboard() {
             <CardTitle className="text-lg">Status Distribution</CardTitle>
             <CardDescription>Breakdown by current state</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-[300px] flex items-center justify-center">
             <StatusDonutChart tickets={tickets} />
           </CardContent>
         </Card>

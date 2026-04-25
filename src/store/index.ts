@@ -310,11 +310,15 @@ export const useStore = create<AppState>((set, get) => ({
 
   isAuthenticated: false,
   currentUser: null,
+  isInitializing: true,
+
+  setInitializing: (val) => set({ isInitializing: val }),
 
   login: (user) => {
     set({
       isAuthenticated: true,
       currentUser: user,
+      isInitializing: false,
     });
   },
 
@@ -322,6 +326,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       isAuthenticated: false,
       currentUser: null,
+      isInitializing: false,
     });
   },
 

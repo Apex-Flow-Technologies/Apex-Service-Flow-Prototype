@@ -28,6 +28,7 @@ export interface User {
   username: string;
   role: "technician" | "manager";
   phone: string;
+  uid?: string;
   address?: string;
   status: "online" | "offline";
   activeJobs: number;
@@ -160,9 +161,9 @@ function formatTicket(docSnap: any): Ticket {
 interface AppState {
   // Auth
   isAuthenticated: boolean;
-  currentUser: { name: string; email: string; role: string } | null;
+  currentUser: { id: string; uid: string; name: string; email: string; role: string } | null;
 
-  login: (email: string, password: string) => boolean;
+  login: (user: any) => void;
   logout: () => void;
 
   // Technicians
@@ -174,7 +175,7 @@ interface AppState {
     tech: Omit<User, "id" | "status" | "activeJobs">
   ) => Promise<void>;
 
-  deleteTechnician: (id: string) => Promise<void>;
+  deleteTechnician: (id: string, uid?: string) => Promise<void>;
 
   updateTechnician: (
     id: string,
@@ -199,6 +200,11 @@ interface AppState {
   deleteTickets: (ids: string[]) => Promise<void>;
 
   addInternalNote: (ticketId: string, note: string) => Promise<void>;
+  
+  // Customers
+  addCustomer: (cust: any) => Promise<void>;
+  updateCustomer: (id: string, updates: any) => Promise<void>;
+  deleteCustomer: (id: string, uid?: string) => Promise<void>;
 
   // Activities
   activities: Activity[];
@@ -226,6 +232,13 @@ async function logActivity(
 /* ===============================
    Cloudinary Helpers
 ================================ */
+
+const getBackendUrl = () => {
+  const url = import.meta.env.VITE_BACKEND_URL;
+  if (url) return url;
+  if (import.meta.env.DEV) return 'http://localhost:4000';
+  return ''; // Relative to origin in production
+};
 
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dyfysuctk";
 const CLOUDINARY_API_KEY = import.meta.env.VITE_CLOUDINARY_API_KEY;
@@ -298,19 +311,11 @@ export const useStore = create<AppState>((set, get) => ({
   isAuthenticated: false,
   currentUser: null,
 
-  login: (email, password) => {
-    if (email && password) {
-      set({
-        isAuthenticated: true,
-        currentUser: {
-          name: "Admin",
-          email,
-          role: "Super Admin",
-        },
-      });
-      return true;
-    }
-    return false;
+  login: (user) => {
+    set({
+      isAuthenticated: true,
+      currentUser: user,
+    });
   },
 
   logout: () => {
@@ -329,7 +334,7 @@ export const useStore = create<AppState>((set, get) => ({
   listenToTechnicians: () => {
     const q = query(
       collection(db, "user"),
-      where("role", "==", "technician")
+      where("role", "in", ["technician", "manager"])
     );
 
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -355,6 +360,7 @@ export const useStore = create<AppState>((set, get) => ({
           address: data.address || "",
           status: data.status || "offline",
           username: data.username || "",
+          uid: data.uid || "",
           activeJobs,
         };
       });
@@ -370,7 +376,7 @@ export const useStore = create<AppState>((set, get) => ({
       const userSnap = await getDocs(
         query(
           collection(db, "user"),
-          where("role", "==", "technician")
+          where("role", "in", ["technician", "manager"])
         )
       );
       const tickets = get().tickets;
@@ -396,6 +402,7 @@ export const useStore = create<AppState>((set, get) => ({
           address: data.address || "",
           status: data.status || "offline",
           username: data.username || "",
+          uid: data.uid || "",
           activeJobs,
         };
       });
@@ -406,22 +413,43 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  addTechnician: async (tech) => {
+  addTechnician: async (tech: any) => {
     try {
-      await addDoc(collection(db, "user"), {
-        ...tech,
-        status: "offline",
-        activeJobs: 0,
+      const response = await fetch(`${getBackendUrl()}/api/users/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...tech,
+          role: tech.role // Should be 'technician' or 'manager'
+        }),
       });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to create user via backend');
+      }
 
       const roleLabel = tech.role.charAt(0).toUpperCase() + tech.role.slice(1);
       await logActivity("creation", `${roleLabel} ${tech.name} was added`);
     } catch (err) {
       console.error("Add technician error:", err);
+      throw err; // Re-throw to show error in UI
     }
   },
 
-  deleteTechnician: async (id) => {
+  deleteTechnician: async (id, uid) => {
+    console.log("Store: deleteTechnician called for ID:", id, "UID:", uid);
+    
+    try {
+      await fetch(`${getBackendUrl()}/api/users/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, uid }),
+      });
+    } catch (err) {
+      console.error("Store: Delete API network error:", err);
+    }
+
     try {
       const tech = get().technicians.find((t) => t.id === id);
       await deleteDoc(doc(db, "user", id));
@@ -430,16 +458,34 @@ export const useStore = create<AppState>((set, get) => ({
         const roleLabel = tech.role.charAt(0).toUpperCase() + tech.role.slice(1);
         await logActivity("status", `${roleLabel} ${tech.name} was removed`);
       }
+      console.log("Store: Firestore technician deleted successfully");
     } catch (err) {
-      console.error("Delete technician error:", err);
+      console.error("Store: Firestore delete failed:", err);
+      throw err;
     }
   },
 
   updateTechnician: async (id, updates) => {
     try {
-      await updateDoc(doc(db, "user", id), updates);
+      const body = { id, ...updates };
+      // Ensure uid is at the top level if it's in updates
+      if (updates.uid) {
+          (body as any).uid = updates.uid;
+      }
+
+      const response = await fetch(`${getBackendUrl()}/api/users/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to update user via backend');
+      }
     } catch (err) {
       console.error("Update technician error:", err);
+      throw err;
     }
   },
 
@@ -626,6 +672,87 @@ export const useStore = create<AppState>((set, get) => ({
       set({ activities });
     } catch (err) {
       console.error("Fetch activities error:", err);
+    }
+  },
+  /* ===============================
+     Customers (Via Backend)
+  ================================ */
+
+  addCustomer: async (cust: any) => {
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/users/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cust, role: "user" }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to create customer');
+      }
+      await logActivity("creation", `Customer ${cust.name} was added`);
+    } catch (err) {
+      console.error("Add customer error:", err);
+      throw err;
+    }
+  },
+
+  updateCustomer: async (id: string, updates: any) => {
+    try {
+      const body = { id, ...updates };
+      // Ensure uid is at the top level for backend requirement
+      if (updates.uid) {
+          (body as any).uid = updates.uid;
+      }
+
+      const response = await fetch(`${getBackendUrl()}/api/users/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to update customer');
+      }
+    } catch (err) {
+      console.error("Update customer error:", err);
+      throw err;
+    }
+  },
+
+  deleteCustomer: async (id: string, uid?: string) => {
+    console.log("Store: deleteCustomer called for ID:", id, "UID:", uid);
+    
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/users/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, uid }),
+      });
+      
+      console.log("Store: Delete API response status:", response.status);
+      
+      if (!response.ok) {
+        let errorMsg = 'Failed to delete customer via backend';
+        try {
+          const err = await response.json();
+          errorMsg = err.error || errorMsg;
+        } catch (e) {
+          // Response was not JSON
+        }
+        console.warn("Store: Backend delete failed:", errorMsg);
+        // We don't throw here yet, we'll try Firestore delete as fallback
+      }
+    } catch (err) {
+      console.error("Store: Delete API network error:", err);
+    }
+
+    try {
+      await deleteDoc(doc(db, "user", id));
+      await logActivity("status", `Customer was removed`);
+      console.log("Store: Firestore document deleted successfully");
+    } catch (err) {
+      console.error("Store: Firestore delete failed:", err);
+      throw err;
     }
   },
 }));

@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Mail
 } from "lucide-react";
 
 import {
@@ -30,12 +31,7 @@ import {
   doc,
   serverTimestamp,
   deleteDoc,
-  orderBy,
-  limit,
-  startAfter,
-  getCountFromServer,
-  QueryDocumentSnapshot,
-  DocumentData,
+  onSnapshot,
   writeBatch
 } from "firebase/firestore";
 import { db } from "@/firebase";
@@ -88,24 +84,24 @@ import {
 } from "@/components/ui/card";
 
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { useStore } from "@/store";
 
 const PAGE_SIZE = 50;
 
 export default function Customers() {
   const { toast } = useToast();
+  const { addCustomer, updateCustomer, deleteCustomer: removeCustomer } = useStore();
 
   // ---------------- STATE ----------------
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [machines, setMachines] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Pagination & Sort State
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [pageHistory, setPageHistory] = useState<QueryDocumentSnapshot<DocumentData>[]>([]);
   const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
   const [sortField, setSortField] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [jumpPage, setJumpPage] = useState("");
@@ -114,6 +110,7 @@ export default function Customers() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    email: "",
     phone: "",
     address: "",
     username: "",
@@ -124,10 +121,12 @@ export default function Customers() {
   const [editCustomer, setEditCustomer] = useState<any>(null);
   const [editForm, setEditForm] = useState({
     name: "",
+    email: "",
     phone: "",
     address: "",
     username: "",
     password: "",
+    uid: "",
   });
 
   // Bulk Upload State
@@ -136,204 +135,44 @@ export default function Customers() {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  // ---------------- FETCH DATA ----------------
-
-  const fetchTotalCount = async () => {
-    try {
-      const coll = collection(db, "user");
-      const q = query(coll, where("role", "==", "user"));
-      const snapshot = await getCountFromServer(q);
-      setTotalCount(snapshot.data().count);
-    } catch (error) {
-      console.error("Error fetching count:", error);
-    }
-  };
-
-  // --- NEW: SERVER SIDE SEARCH ---
-  const performSearch = async (searchTerm: string) => {
+  // ---------------- FETCH DATA (REAL-TIME) ----------------
+  
+  useEffect(() => {
     setIsLoading(true);
-    try {
-      // NOTE: Firestore search is case-sensitive by default.
-      // This query looks for names starting with the search term.
-      // Example: 'Joh' will match 'John', 'Johnny'.
-      const q = query(
-        collection(db, "user"),
-        where("role", "==", "user"),
-        where("name", ">=", searchTerm),
-        where("name", "<=", searchTerm + '\uf8ff'),
-        limit(50) 
-      );
+    const q = query(
+      collection(db, "user"),
+      where("role", "==", "user")
+    );
 
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      
-      setCustomers(data);
-      // We do not set pagination data (lastDoc, page) during search
-      // because search results are a temporary view.
-    } catch (error) {
-      console.error("Error searching:", error);
-      toast({ title: "Search failed", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchFirstPage = async () => {
-    setIsLoading(true);
-    try {
-      const q = query(
-        collection(db, "user"),
-        where("role", "==", "user"),
-        orderBy(sortField, sortDir),
-        limit(PAGE_SIZE)
-      );
-      const snap = await getDocs(q);
-      
-      const data = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      
-      setCustomers(data);
-      setLastDoc(snap.docs[snap.docs.length - 1] || null);
-      setPageHistory([]);
-      setPage(1);
-      
-      fetchTotalCount(); // Update total count
-    } catch (error) {
-      console.error("Error fetching customers:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchNextPage = async () => {
-    if (!lastDoc) return;
-    setIsLoading(true);
-    try {
-      const q = query(
-        collection(db, "user"),
-        where("role", "==", "user"),
-        orderBy(sortField, sortDir),
-        startAfter(lastDoc),
-        limit(PAGE_SIZE)
-      );
-      const snap = await getDocs(q);
-
-      if (!snap.empty) {
-        setPageHistory(prev => [...prev, lastDoc]);
-        const data = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-        setCustomers(data);
-        setLastDoc(snap.docs[snap.docs.length - 1]);
-        setPage(p => p + 1);
-      }
-    } catch (error) {
-      console.error("Error fetching next page:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchPrevPage = async () => {
-    if (page === 1 || pageHistory.length === 0) return;
-    setIsLoading(true);
-    try {
-      const newHistory = pageHistory.slice(0, -1);
-      let q;
-      
-      if (newHistory.length === 0) {
-         q = query(
-           collection(db, "user"),
-           where("role", "==", "user"),
-           orderBy(sortField, sortDir),
-           limit(PAGE_SIZE)
-         );
-      } else {
-         const startDoc = newHistory[newHistory.length - 1];
-         q = query(
-           collection(db, "user"),
-           where("role", "==", "user"),
-           orderBy(sortField, sortDir),
-           startAfter(startDoc),
-           limit(PAGE_SIZE)
-         );
-      }
-
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      
-      setCustomers(data);
-      setLastDoc(snap.docs[snap.docs.length - 1]);
-      setPageHistory(newHistory);
-      setPage(p => p - 1);
-    } catch (error) {
-      console.error("Error fetching prev page:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleJumpToPage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if(search) return; // Disable jump when searching
-
-    const targetPage = parseInt(jumpPage);
-    const maxPage = Math.ceil(totalCount / PAGE_SIZE);
-
-    if (!targetPage || targetPage < 1 || targetPage > maxPage || targetPage === page) return;
-
-    setIsLoading(true);
-    try {
-        let currentLastDoc = null;
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => {
+        const docData = d.data() as any;
+        let createdAtDate = new Date(0);
         
-        for (let i = 1; i < targetPage; i++) {
-            let q = query(
-                collection(db, "user"),
-                where("role", "==", "user"),
-                orderBy(sortField, sortDir),
-                limit(PAGE_SIZE)
-            );
-            if (currentLastDoc) {
-                q = query(
-                    collection(db, "user"),
-                    where("role", "==", "user"),
-                    orderBy(sortField, sortDir),
-                    startAfter(currentLastDoc),
-                    limit(PAGE_SIZE)
-                );
-            }
-            const snap = await getDocs(q);
-            if (snap.empty) break;
-            currentLastDoc = snap.docs[snap.docs.length - 1];
+        if (docData.createdAt) {
+          if (typeof docData.createdAt.toDate === 'function') {
+            createdAtDate = docData.createdAt.toDate();
+          } else {
+            createdAtDate = new Date(docData.createdAt);
+          }
         }
 
-        if (currentLastDoc || targetPage === 1) {
-             const q = query(
-                collection(db, "user"),
-                where("role", "==", "user"),
-                orderBy(sortField, sortDir),
-                startAfter(currentLastDoc),
-                limit(PAGE_SIZE)
-            );
-            const snap = await getDocs(q);
-            const data = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-            
-            setCustomers(data);
-            setLastDoc(snap.docs[snap.docs.length - 1]);
-            setPageHistory([]); 
-            setPage(targetPage);
-        }
-    } catch (error) {
-        console.error("Jump failed", error);
-        toast({ title: "Could not jump to page", variant: "destructive" });
-    } finally {
-        setIsLoading(false);
-        setJumpPage("");
-    }
-  };
+        return { 
+          id: d.id, 
+          ...docData,
+          createdAt: createdAtDate
+        };
+      });
+      setAllCustomers(data);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Firestore error:", error);
+      toast({ title: "Connection Error", description: "Failed to sync customers.", variant: "destructive" });
+      setIsLoading(false);
+    });
 
-  const fetchAllForBulkCheck = async () => {
-      const q = query(collection(db, "user"), where("role", "==", "user"));
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-  };
+    return () => unsubscribe();
+  }, []);
 
   const fetchMachines = async () => {
     try {
@@ -344,27 +183,163 @@ export default function Customers() {
     }
   };
 
-  // --- CHANGED: SEARCH EFFECT ---
-  // Debounce search so we don't query DB on every keystroke
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (search.trim()) {
-        performSearch(search);
-      } else {
-        // If search is cleared, go back to normal pagination
-        fetchFirstPage(); 
-      }
-    }, 500); // 500ms delay
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [search, sortField, sortDir]); // Re-run if search or sort changes
-
-  useEffect(() => {
-    // Initial loads
     fetchMachines();
-    // We removed fetchFirstPage() from here because the Search Effect above 
-    // handles the initial load (when search is empty string on mount).
   }, []);
+
+  // ---------------- DERIVED STATE ----------------
+  const allFiltered = allCustomers.filter(c => {
+    const s = search.toLowerCase();
+    return (
+      (c.name || "").toLowerCase().includes(s) ||
+      (c.username || "").toLowerCase().includes(s) ||
+      (c.phone || "").includes(s)
+    );
+  });
+
+  const allSorted = [...allFiltered].sort((a, b) => {
+    let valA = a[sortField];
+    let valB = b[sortField];
+
+    if (sortField === 'createdAt') {
+        valA = valA instanceof Date ? valA.getTime() : new Date(valA).getTime();
+        valB = valB instanceof Date ? valB.getTime() : new Date(valB).getTime();
+    } else {
+        valA = String(valA || "").toLowerCase();
+        valB = String(valB || "").toLowerCase();
+    }
+
+    if (valA < valB) return sortDir === "asc" ? -1 : 1;
+    if (valA > valB) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const paginatedCustomers = allSorted.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE
+  );
+
+  const totalPages = Math.ceil(allFiltered.length / PAGE_SIZE);
+
+  const handleJumpToPage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetPage = parseInt(jumpPage);
+    if (targetPage >= 1 && targetPage <= totalPages) {
+        setPage(targetPage);
+    }
+    setJumpPage("");
+  };
+
+  // ---------------- VALIDATION ----------------
+  const validateInputs = (data: any, isEditMode: boolean) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!data.name || data.name.trim().length < 2) return false;
+    if (!data.email || !emailRegex.test(data.email)) return false;
+    if (!data.username || data.username.trim().length < 3) return false;
+    if (!data.phone || data.phone.length !== 10) return false;
+    if (!isEditMode && (!data.password || data.password.length < 6)) return false;
+    return true;
+  };
+
+  // ---------------- HANDLERS ----------------
+
+  const handleEditClick = (customer: any) => {
+    setEditCustomer(customer);
+    setEditForm({
+      name: customer.name || "",
+      email: customer.email || "",
+      phone: customer.phone || "",
+      address: customer.address || "",
+      username: customer.username || "",
+      password: "", 
+      uid: customer.uid || "",
+    });
+  };
+
+  const saveCustomerEdits = async () => {
+    if (!editCustomer?.id) {
+        toast({ title: "Update Error", description: "Missing user ID.", variant: "destructive" });
+        return;
+    }
+
+    if (!validateInputs(editForm, true)) {
+      toast({ title: "Validation Error", description: "Please fix inputs.", variant: "destructive" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateCustomer(editCustomer.id, editForm);
+      toast({ title: "Customer updated successfully" });
+      setEditCustomer(null);
+    } catch (error: any) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const createCustomer = async () => {
+    if (!validateInputs(form, false)) {
+      toast({ title: "Validation Error", description: "Check fields.", variant: "destructive" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await addCustomer(form);
+      toast({ title: "Customer created successfully" });
+      setForm({ name: "", email: "", phone: "", address: "", username: "", password: "" });
+      setAddOpen(false);
+    } catch (error: any) {
+      toast({ title: "Failed to create", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const assignMachine = async (machineId: string) => {
+    if (!editCustomer?.id) return;
+    try {
+      setMachines(prev => prev.map(m => m.id === machineId ? { ...m, assignedTo: editCustomer.id } : m));
+      await updateDoc(doc(db, "machines", machineId), { assignedTo: editCustomer.id });
+      toast({ title: "Machine assigned successfully" });
+    } catch (error: any) {
+      console.error("Assign failed", error);
+      toast({ title: "Assignment failed", description: error.message, variant: "destructive" });
+      // Revert local state
+      fetchMachines();
+    }
+  };
+
+  const unassignMachine = async (machineId: string) => {
+    try {
+      setMachines(prev => prev.map(m => m.id === machineId ? { ...m, assignedTo: null } : m));
+      await updateDoc(doc(db, "machines", machineId), { assignedTo: null });
+      toast({ title: "Machine unassigned successfully" });
+    } catch (error: any) {
+      console.error("Unassign failed", error);
+      toast({ title: "Unassign failed", description: error.message, variant: "destructive" });
+      fetchMachines();
+    }
+  };
+
+  const deleteCustomer = async (customer: any) => {
+    // Temporarily removing confirm to ensure it's not the blocker
+    console.log("Page: deleteCustomer called for", customer.name);
+    
+    try {
+        const related = machines.filter((m) => m.assignedTo === customer.id);
+        for (const m of related) {
+          await updateDoc(doc(db, "machines", m.id), { assignedTo: null });
+        }
+        await removeCustomer(customer.id, customer.uid);
+        toast({ title: "Customer deleted successfully" });
+    } catch (error: any) {
+        console.error("Delete failed", error);
+        toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
+    }
+  };
 
   // ---------------- HELPERS ----------------
   const getMachineLabel = (m: any) => m?.machineCode || "Unnamed Machine";
@@ -384,137 +359,12 @@ export default function Customers() {
           setSortField(field);
           setSortDir("asc");
       }
+      setPage(1);
   };
-
-  // ---------------- VALIDATION ----------------
-  const validateInputs = (data: any, isEditMode: boolean) => {
-    if (!data.name || data.name.trim().length < 2) return false;
-    if (!data.username || data.username.trim().length < 3) return false;
-    if (!data.phone || data.phone.length !== 10) return false;
-    if (!isEditMode && (!data.password || data.password.length < 6)) return false;
-    return true;
-  };
-
-  // ---------------- HANDLERS ----------------
-
-  const handleEditClick = (customer: any) => {
-    setEditCustomer(customer);
-    setEditForm({
-      name: customer.name || "",
-      phone: customer.phone || "",
-      address: customer.address || "",
-      username: customer.username || "",
-      password: "", 
-    });
-  };
-
-  const saveCustomerEdits = async () => {
-    if (!editCustomer?.id) return;
-
-    if (!validateInputs(editForm, true)) {
-      toast({ title: "Validation Error", description: "Please fix inputs.", variant: "destructive" });
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const docRef = doc(db, "user", editCustomer.id);
-      const updateData: any = {
-        name: editForm.name,
-        phone: editForm.phone,
-        address: editForm.address,
-        username: editForm.username,
-      };
-
-      if (editForm.password.trim() !== "") {
-        updateData.password = editForm.password;
-      }
-      await updateDoc(docRef, updateData);
-
-      setCustomers((prev) =>
-        prev.map((c) => c.id === editCustomer.id ? { ...c, ...updateData } : c)
-      );
-      toast({ title: "Customer updated" });
-      setEditCustomer(null);
-    } catch (error) {
-      toast({ title: "Update failed", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const createCustomer = async () => {
-    if (!validateInputs(form, false)) {
-      toast({ title: "Validation Error", description: "Check fields.", variant: "destructive" });
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const newDoc = await addDoc(collection(db, "user"), {
-        ...form,
-        role: "user",
-        createdAt: serverTimestamp(),
-      });
-
-      // Only add to local list if search is empty (otherwise it might look weird)
-      if(!search) {
-          setCustomers((prev) => [
-            { id: newDoc.id, ...form, role: "user" },
-            ...prev,
-          ]);
-      }
-
-      toast({ title: "Customer created" });
-      setForm({ name: "", phone: "", address: "", username: "", password: "" });
-      setAddOpen(false);
-    } catch (error) {
-      toast({ title: "Failed to create", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const assignMachine = async (machineId: string) => {
-    if (!editCustomer?.id) return;
-    setMachines(prev => prev.map(m => m.id === machineId ? { ...m, assignedTo: editCustomer.id } : m));
-    await updateDoc(doc(db, "machines", machineId), { assignedTo: editCustomer.id });
-  };
-
-  const unassignMachine = async (machineId: string) => {
-    setMachines(prev => prev.map(m => m.id === machineId ? { ...m, assignedTo: null } : m));
-    await updateDoc(doc(db, "machines", machineId), { assignedTo: null });
-  };
-
-  const deleteCustomer = async (customer: any) => {
-    if(!confirm("Are you sure?")) return;
-    
-    setMachines(prev => prev.map(m => m.assignedTo === customer.id ? { ...m, assignedTo: null } : m));
-    setCustomers(prev => prev.filter(c => c.id !== customer.id));
-
-    try {
-        const related = machines.filter((m) => m.assignedTo === customer.id);
-        for (const m of related) {
-          await updateDoc(doc(db, "machines", m.id), { assignedTo: null });
-        }
-        await deleteDoc(doc(db, "user", customer.id));
-        
-        toast({ title: "Customer deleted" });
-    } catch (error) {
-        console.error("Delete failed", error);
-        toast({ title: "Error deleting customer", variant: "destructive" });
-    }
-  };
-
-  // REMOVED client-side filtering. 
-  // 'customers' now contains exactly what needs to be shown (page data OR search data)
-  const filteredCustomers = customers;
-
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   // ---------------- BATCH UPLOAD FUNCTION ----------------
   const uploadInBatches = async (rows: any[]) => {
-    const CHUNK_SIZE = 500;
+    const CHUNK_SIZE = 50; // Smaller chunks for Auth creation
     const chunks = [];
     
     for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
@@ -522,24 +372,29 @@ export default function Customers() {
     }
 
     let totalDone = 0;
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
 
     for (const chunk of chunks) {
-        const batch = writeBatch(db);
-        
-        chunk.forEach((r: any) => {
-            const docRef = doc(collection(db, "user"));
-            batch.set(docRef, {
-                name: r.name || "",
-                username: r.username || "",
-                phone: r.phone || "",
-                address: r.address || "",
-                legacyCustomerId: r.legacyCustomerId || null, 
-                role: "user",
-                createdAt: serverTimestamp(),
-            });
+        const usersToCreate = chunk.map((r: any) => ({
+            name: r.name || "Unknown",
+            username: (r.username || r.name || "user").toLowerCase().replace(/\s+/g, ''),
+            password: r.password || "Apex@123456", // Default password for bulk upload
+            phone: String(r.phone || "").replace(/\D/g, '').slice(0, 10),
+            address: r.address || "",
+            legacyCustomerId: r.legacyCustomerId || null,
+            role: "user"
+        }));
+
+        const response = await fetch(`${backendUrl}/api/users/bulk-create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ users: usersToCreate }),
         });
 
-        await batch.commit();
+        if (!response.ok) {
+            console.error("Bulk upload chunk failed");
+        }
+
         totalDone += chunk.length;
         setUploadProgress(Math.round((totalDone / rows.length) * 100));
     }
@@ -572,12 +427,12 @@ export default function Customers() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex justify-between items-center">
-            <CardTitle>Customer List <span className="ml-2 text-sm text-muted-foreground font-normal">({search ? 'Search Results' : totalCount + ' total'})</span></CardTitle>
+            <CardTitle>Customer List <span className="ml-2 text-sm text-muted-foreground font-normal">({search ? 'Search Results' : allFiltered.length + ' total'})</span></CardTitle>
             
             <div className="flex items-center gap-2">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2" disabled={!!search}>
+                        <Button variant="outline" size="sm" className="gap-2">
                             <ArrowUpDown className="h-4 w-4" /> Sort
                         </Button>
                     </DropdownMenuTrigger>
@@ -609,8 +464,29 @@ export default function Customers() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead>Full Name</TableHead>
-                <TableHead>Username</TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => handleSort("name")}
+                >
+                  <div className="flex items-center gap-2">
+                    Full Name
+                    {sortField === "name" && (
+                      <ArrowUpDown className={cn("h-4 w-4", sortDir === "desc" ? "rotate-180" : "")} />
+                    )}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => handleSort("username")}
+                >
+                   <div className="flex items-center gap-2">
+                    Username
+                    {sortField === "username" && (
+                      <ArrowUpDown className={cn("h-4 w-4", sortDir === "desc" ? "rotate-180" : "")} />
+                    )}
+                  </div>
+                </TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Machines</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
@@ -627,16 +503,17 @@ export default function Customers() {
                           <TableCell/>
                       </TableRow>
                   ))
-              ) : filteredCustomers.length === 0 ? (
+              ) : paginatedCustomers.length === 0 ? (
                  <TableRow>
                     <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
                         {search ? "No customers found matching that name." : "No customers found."}
                     </TableCell>
                  </TableRow>
               ) : (
-                filteredCustomers.map((c) => (
+                paginatedCustomers.map((c) => (
                   <TableRow key={c.id} className="hover:bg-muted/30">
                     <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell>{c.email || "-"}</TableCell>
                     <TableCell>{c.username || "-"}</TableCell>
                     <TableCell>{c.phone || "-"}</TableCell>
                     <TableCell>
@@ -668,9 +545,8 @@ export default function Customers() {
           </Table>
         </CardContent>
         
-        {/* RIGHT ALIGNED PAGINATION - DISABLED DURING SEARCH */}
-        {!search && (
-            <CardFooter className="flex items-center justify-end gap-6 border-t py-4">
+        {/* RIGHT ALIGNED PAGINATION */}
+        <CardFooter className="flex items-center justify-end gap-6 border-t py-4">
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Go to:</span>
                     <form onSubmit={handleJumpToPage} className="flex items-center">
@@ -691,15 +567,14 @@ export default function Customers() {
                 </div>
 
                 <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={fetchPrevPage} disabled={page === 1 || isLoading}>
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || isLoading}>
                         <ChevronLeft className="h-4 w-4 mr-1" /> Prev
                     </Button>
-                    <Button variant="outline" size="sm" onClick={fetchNextPage} disabled={!lastDoc || page >= totalPages || isLoading}>
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || isLoading}>
                         Next <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
                 </div>
             </CardFooter>
-        )}
       </Card>
 
       {/* ---------------- ADD DIALOG ---------------- */}
@@ -716,7 +591,14 @@ export default function Customers() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Phone (10 digits)</Label>
+                <Label>Email Address <span className="text-red-500">*</span></Label>
+                <div className="relative">
+                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input className="pl-9" placeholder="customer@example.com" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Phone (10 digits) <span className="text-red-500">*</span></Label>
                 <div className="relative">
                     <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -775,7 +657,14 @@ export default function Customers() {
                     </div>
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="edit-phone">Phone (10 digits)</Label>
+                    <Label htmlFor="edit-email">Email Address <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input id="edit-email" className="pl-9" value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="edit-phone">Phone (10 digits) <span className="text-red-500">*</span></Label>
                     <div className="relative">
                         <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input 
@@ -899,7 +788,7 @@ export default function Customers() {
                   const ws = wb.Sheets[wb.SheetNames[0]];
                   const rawRows = XLSX.utils.sheet_to_json(ws) as any[];
                   
-                  const dbData = await fetchAllForBulkCheck();
+                  const dbData = allCustomers;
                   const dbIds = new Set(dbData.map((c: any) => String(c.legacyCustomerId || "").trim()));
                   const seenIdsInFile = new Set<string>();
                   
@@ -963,7 +852,7 @@ export default function Customers() {
                     setBulkUploading(true);
                     const validRows = bulkPreview.filter((r: any) => r._status === "Ready");
                     await uploadInBatches(validRows);
-                    setBulkUploading(false); setBulkPreview([]); setBulkOpen(false); fetchFirstPage();
+                    setBulkUploading(false); setBulkPreview([]); setBulkOpen(false);
                     toast({ title: "Bulk upload complete", description: `${validRows.length} customers uploaded.` });
                 }} disabled={bulkUploading || bulkPreview.filter((r:any)=>r._status==="Ready").length === 0}>
                     {bulkUploading ? "Uploading..." : `Confirm Upload (${bulkPreview.filter((r:any)=>r._status==="Ready").length})`}

@@ -131,11 +131,20 @@ export function StatusDonutChart({ tickets }: { tickets: Ticket[] }) {
 }
 
 export function TechnicianPerformanceChart({ technicians, tickets }: { technicians: User[], tickets: Ticket[] }) {
-  const data = technicians.slice(0, 5).map(tech => ({
-    name: tech.name.split(' ')[0],
-    completed: tickets.filter(t => (t.assignedToId === tech.id || t.assignedToId === tech.username) && t.status === 'completed').length,
-    active: tickets.filter(t => (t.assignedToId === tech.id || t.assignedToId === tech.username) && (t.status === 'assigned' || t.status === 'in-progress')).length
-  }));
+  const data = technicians
+    .filter(tech => tech.role === 'technician')
+    .map(tech => {
+      const completed = tickets.filter(t => (t.assignedToId === tech.id || t.assignedToId === tech.username) && t.status === 'completed').length;
+      const active = tickets.filter(t => (t.assignedToId === tech.id || t.assignedToId === tech.username) && (t.status === 'assigned' || t.status === 'in-progress')).length;
+      return {
+        name: tech.name.split(' ')[0],
+        completed,
+        active,
+        total: completed + active
+      };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
 
   return (
     <div className="h-[400px] w-full">

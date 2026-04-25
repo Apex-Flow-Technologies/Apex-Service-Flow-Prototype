@@ -55,7 +55,7 @@ export default function Dashboard() {
     },
     {
       title: 'Active Technicians',
-      value: technicians.filter((t) => t.status === 'online').length,
+      value: technicians.filter((t) => t.role === 'technician' && t.status === 'online').length,
       icon: Users,
       color: 'text-green-500',
       bgColor: 'bg-green-500/10',

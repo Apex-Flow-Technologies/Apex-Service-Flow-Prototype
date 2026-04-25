@@ -35,18 +35,28 @@ export default function Login() {
     try {
       const userCred = await signInWithEmailAndPassword(auth, email, password);
       const uid = userCred.user.uid;
-      const userDoc = await getDoc(doc(db, "user", uid));
+      const { query, collection, where, getDocs } = await import("firebase/firestore");
+      const q = query(collection(db, "user"), where("uid", "==", uid));
+      const snap = await getDocs(q);
 
-      if (!userDoc.exists()) {
-        throw new Error("No user record found");
+      if (snap.empty) {
+        throw new Error("No user record found in database");
       }
 
+      const userDoc = snap.docs[0];
       const userData = userDoc.data();
-      login(email, password);
+      
+      login({
+        id: userDoc.id,
+        uid: uid,
+        name: userData.name || "Admin",
+        email: email,
+        role: userData.role || "Admin",
+      });
 
       toast({
         title: "Welcome back!",
-        description: `Logged in as ${userData.role}`,
+        description: `Logged in as ${userData.role || 'Admin'}`,
       });
 
       navigate("/dashboard");

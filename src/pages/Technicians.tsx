@@ -41,7 +41,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export default function Technicians() {
-  const { technicians, addTechnician, updateTechnician, deleteTechnician, fetchTechnicians } = useStore();
+  const { technicians, addTechnician, updateTechnician, deleteTechnician, listenToTechnicians, listenToTickets } = useStore();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -64,8 +64,13 @@ export default function Technicians() {
   const [editingUser, setEditingUser] = useState<(User & { password?: string }) | null>(null);
 
   useEffect(() => {
-    fetchTechnicians();
-  }, [fetchTechnicians]);
+    const unsubStaff = listenToTechnicians();
+    const unsubTickets = listenToTickets();
+    return () => {
+      unsubStaff();
+      unsubTickets();
+    };
+  }, [listenToTechnicians, listenToTickets]);
 
   const filteredTechnicians = technicians.filter(
     (tech) =>
@@ -121,7 +126,7 @@ export default function Technicians() {
     setter(numericVal);
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const errorMsg = getValidationError(newUser, false);
@@ -134,13 +139,21 @@ export default function Technicians() {
         return;
     }
 
-    addTechnician(newUser);
-    setIsAddDialogOpen(false);
-    setNewUser({ name: '', email: '', phone: '', role: 'technician', username: '', password: '', address: '' });
-    toast({
-      title: 'User added',
-      description: `${newUser.name} has been added to the team.`,
-    });
+    try {
+        await addTechnician(newUser);
+        setIsAddDialogOpen(false);
+        setNewUser({ name: '', email: '', phone: '', role: 'technician', username: '', password: '', address: '' });
+        toast({
+          title: 'User added',
+          description: `${newUser.name} has been added to the team.`,
+        });
+    } catch (err: any) {
+        toast({
+          variant: "destructive",
+          title: "Creation Failed",
+          description: err.message || "Failed to create staff member.",
+        });
+    }
   };
 
   const openEditDialog = (tech: User) => {
@@ -148,7 +161,7 @@ export default function Technicians() {
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateUser = (e: React.FormEvent) => {
+  const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (editingUser) {
@@ -162,20 +175,26 @@ export default function Technicians() {
             return;
         }
 
-        if (updateTechnician) {
-            updateTechnician(editingUser.id, editingUser);
+        try {
+            await updateTechnician(editingUser.id, editingUser);
             setIsEditDialogOpen(false);
             setEditingUser(null);
             toast({
                 title: 'Staff updated',
                 description: `${editingUser.name}'s details have been updated.`,
             });
+        } catch (err: any) {
+            toast({
+                variant: "destructive",
+                title: "Update Failed",
+                description: err.message || "Failed to update staff member.",
+            });
         }
     }
   };
 
   const handleDelete = (tech: User) => {
-    deleteTechnician(tech.id);
+    deleteTechnician(tech.id, tech.uid);
     toast({
       title: 'User removed',
       description: `${tech.name} has been removed from the team.`,

@@ -7,7 +7,8 @@ import {
   Activity as ActivityIcon,
   PlayCircle,
   ClipboardCheck,
-  UserCheck
+  UserCheck,
+  PlusCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -217,7 +218,11 @@ export default function Dashboard() {
                       activity.type === 'creation' ? 'bg-purple-500/10 text-purple-600' :
                       'bg-slate-500/10 text-slate-600'
                     )}>
-                      <ActivityIcon className="h-4 w-4" />
+                      {activity.type === 'creation' ? (
+                        <PlusCircle className="h-4 w-4" />
+                      ) : (
+                        <ActivityIcon className="h-4 w-4" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground leading-snug">{activity.action}</p>
